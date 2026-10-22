@@ -1,0 +1,4 @@
+-- Initial Flyway migration
+-- This migration verifies Flyway is correctly configured and can execute SQL
+-- No business tables are created in this foundation migration
+-- Flyway automatically creates and maintains the flyway_schema_history table

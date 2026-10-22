@@ -1,0 +1,50 @@
+
+spring:
+  application:
+    name: growthprint-backend
+
+  datasource:
+    url: "${DATABASE_URL:}"
+    username: "${DATABASE_USERNAME:}"
+    password: "${DATABASE_PASSWORD:}"
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  openapi:
+    info:
+      title: GrowthPrint Backend API
+      description: REST API for the GrowthPrint platform
+      version: 1.0.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+server:
+  port: 8080
+
+app:
+  admin-endpoints:
+    # Development-only until server-side authentication and authorization exist.
+    enabled: false
