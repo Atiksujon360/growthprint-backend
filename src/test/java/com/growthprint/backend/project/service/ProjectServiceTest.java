@@ -142,7 +142,7 @@ class ProjectServiceTest {
         when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
         when(projectRepository.save(any())).thenReturn(testProject);
         when(milestoneRepository.findByProjectId(any())).thenReturn(List.of());
-        when(clientRepository.findById(any())).thenReturn(Optional.of(testClient));
+        when(clientRepository.findById(testProject.getClientId())).thenReturn(Optional.of(testClient));
 
         var result = projectService.create(command);
 
