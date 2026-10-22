@@ -11,7 +11,6 @@ import com.growthprint.backend.crm.lead.exception.InquiryNotFoundException;
 import com.growthprint.backend.crm.lead.repository.CrmLeadRepository;
 import com.growthprint.backend.lead.entity.Lead;
 import com.growthprint.backend.lead.repository.LeadRepository;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +22,6 @@ import java.util.UUID;
 import static com.growthprint.backend.crm.lead.entity.CrmLeadEnums.CrmLeadSource;
 
 @Service
-@ConditionalOnBean(CrmLeadRepository.class)
 public class CrmLeadService {
 
     private final CrmLeadRepository crmLeadRepository;
