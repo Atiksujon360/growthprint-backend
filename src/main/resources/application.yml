@@ -48,3 +48,25 @@ app:
   admin-endpoints:
     # Development-only until server-side authentication and authorization exist.
     enabled: false
+
+  security:
+    jwt:
+      # JWT signing secret - MUST be set in production via environment variable
+      # Generate a secure random key: openssl rand -base64 64
+      secret: "${JWT_SECRET:}"
+      # Token expiration time (default: 1 hour)
+      expiration: 1h
+      issuer: growthprint-backend
+
+  cors:
+    # Allowed CORS origins for frontend (comma-separated)
+    # Development: http://localhost:3000
+    # Production: https://your-production-domain.com
+    allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:3000}"
+
+  rate-limit:
+    public-inquiries:
+      # Maximum requests per time window
+      max-requests: 10
+      # Time window for rate limiting
+      window: 1m

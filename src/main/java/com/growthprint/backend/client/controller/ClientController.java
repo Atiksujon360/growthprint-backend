@@ -3,7 +3,9 @@ package com.growthprint.backend.client.controller;
 import com.growthprint.backend.client.dto.ClientResponse;
 import com.growthprint.backend.client.service.ClientService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,13 +26,15 @@ public class ClientController {
     }
 
     @GetMapping
-    @Operation(summary = "List all clients")
+    @Operation(summary = "List all clients", security = @SecurityRequirement(name = "bearerAuth"))
+    @PreAuthorize("hasRole('ADMIN')")
     public List<ClientResponse> list() {
         return clientService.findAll();
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get client by ID")
+    @Operation(summary = "Get client by ID", security = @SecurityRequirement(name = "bearerAuth"))
+    @PreAuthorize("hasRole('ADMIN')")
     public ClientResponse getById(@PathVariable UUID id) {
         return clientService.findById(id);
     }

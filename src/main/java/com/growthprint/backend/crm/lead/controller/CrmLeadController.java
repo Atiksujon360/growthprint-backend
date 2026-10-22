@@ -5,9 +5,10 @@ import com.growthprint.backend.crm.lead.dto.CrmLeadResponse;
 import com.growthprint.backend.crm.lead.dto.UpdatePipelineStageCommand;
 import com.growthprint.backend.crm.lead.service.CrmLeadService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,8 +22,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/crm-leads")
-@ConditionalOnProperty(name = "app.admin-endpoints.enabled", havingValue = "true")
-@Tag(name = "CRM Leads (Development admin)")
+@Tag(name = "CRM Leads")
 public class CrmLeadController {
 
     private final CrmLeadService crmLeadService;
@@ -32,25 +32,29 @@ public class CrmLeadController {
     }
 
     @GetMapping
-    @Operation(summary = "List all CRM leads (development-only; no authentication)")
+    @Operation(summary = "List all CRM leads", security = @SecurityRequirement(name = "bearerAuth"))
+    @PreAuthorize("hasRole('ADMIN')")
     public List<CrmLeadResponse> list() {
         return crmLeadService.findAll();
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get CRM lead by ID (development-only; no authentication)")
+    @Operation(summary = "Get CRM lead by ID", security = @SecurityRequirement(name = "bearerAuth"))
+    @PreAuthorize("hasRole('ADMIN')")
     public CrmLeadResponse getById(@PathVariable UUID id) {
         return crmLeadService.findById(id);
     }
 
     @PostMapping
-    @Operation(summary = "Create a new CRM lead (development-only; no authentication)")
+    @Operation(summary = "Create a new CRM lead", security = @SecurityRequirement(name = "bearerAuth"))
+    @PreAuthorize("hasRole('ADMIN')")
     public CrmLeadResponse create(@Valid @RequestBody CreateCrmLeadCommand command) {
         return crmLeadService.create(command);
     }
 
     @PostMapping("/inquiry/{inquiryId}/convert")
-    @Operation(summary = "Convert an inquiry to a CRM lead (development-only; no authentication)")
+    @Operation(summary = "Convert an inquiry to a CRM lead", security = @SecurityRequirement(name = "bearerAuth"))
+    @PreAuthorize("hasRole('ADMIN')")
     public CrmLeadResponse convertFromInquiry(
             @PathVariable UUID inquiryId,
             @Valid @RequestBody CreateCrmLeadCommand command) {
@@ -58,7 +62,8 @@ public class CrmLeadController {
     }
 
     @PutMapping("/{id}/pipeline-stage")
-    @Operation(summary = "Update CRM lead pipeline stage (development-only; no authentication)")
+    @Operation(summary = "Update CRM lead pipeline stage", security = @SecurityRequirement(name = "bearerAuth"))
+    @PreAuthorize("hasRole('ADMIN')")
     public CrmLeadResponse updatePipelineStage(
             @PathVariable UUID id,
             @Valid @RequestBody UpdatePipelineStageCommand command) {
