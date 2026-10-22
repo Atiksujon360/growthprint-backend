@@ -65,7 +65,7 @@ class CorrelationIdFilterTest {
 
     @Test
     void doFilterInternal_InvalidControlCharacters_GeneratesNewId() throws Exception {
-        String invalidId = "invalid\x00id";
+        String invalidId = "invalid\u0000id";
         when(request.getHeader("X-Correlation-ID")).thenReturn(invalidId);
 
         correlationIdFilter.doFilterInternal(request, response, filterChain);
