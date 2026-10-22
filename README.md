@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # GrowthPrint Backend
 
 Spring Boot backend for the GrowthPrint business management platform.
@@ -174,3 +175,7 @@ For production deployment on Render:
    - Use **external** URLs for local development from your computer
 
 Authentication and authorization, rate limiting, idempotency, spam prevention, and pagination remain follow-up work for production hardening.
+=======
+# growthprint-backend
+Create a private repository named growthprint-backend, with the right Git settings.
+>>>>>>> 2208c2a24417c56c595426aa69ea9f6b505d4789
