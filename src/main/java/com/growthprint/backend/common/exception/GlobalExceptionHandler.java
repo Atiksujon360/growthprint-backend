@@ -1,5 +1,6 @@
 package com.growthprint.backend.common.exception;
 
+import com.growthprint.backend.client.exception.ClientNotFoundException;
 import com.growthprint.backend.common.dto.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -29,6 +30,12 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException exception, HttpServletRequest request) {
         return response(HttpStatus.BAD_REQUEST, "Request body is missing or contains an invalid value",
                 request, Map.of());
+    }
+
+    @ExceptionHandler(ClientNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleClientNotFound(
+            ClientNotFoundException exception, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
     }
 
     private org.springframework.http.ResponseEntity<ApiErrorResponse> response(
