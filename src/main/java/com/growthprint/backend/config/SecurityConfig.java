@@ -59,9 +59,10 @@ public class SecurityConfig {
                         // Authenticated endpoints
                         .requestMatchers("/api/v1/auth/me").authenticated()
 
-                        // Clients endpoints - require authentication
+                        // Clients endpoints - require ADMIN role until client portal authorization is
+                        // implemented
                         // Note: Client-specific data isolation will be implemented in a future phase
-                        .requestMatchers("/api/v1/clients/**").authenticated()
+                        .requestMatchers("/api/v1/clients/**").hasRole("ADMIN")
 
                         // Admin endpoints - require ADMIN role when enabled
                         .requestMatchers("/api/v1/leads/**").hasRole("ADMIN")

@@ -6,6 +6,8 @@ import com.growthprint.backend.crm.lead.exception.CrmLeadAlreadyExistsException;
 import com.growthprint.backend.crm.lead.exception.CrmLeadConversionException;
 import com.growthprint.backend.crm.lead.exception.CrmLeadNotFoundException;
 import com.growthprint.backend.crm.lead.exception.InquiryNotFoundException;
+import com.growthprint.backend.project.exception.ProjectAlreadyExistsException;
+import com.growthprint.backend.project.exception.ProjectNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -64,6 +66,18 @@ public class GlobalExceptionHandler {
     public org.springframework.http.ResponseEntity<ApiErrorResponse> handleCrmLeadConversion(
             CrmLeadConversionException exception, HttpServletRequest request) {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(ProjectNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleProjectNotFound(
+            ProjectNotFoundException exception, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(ProjectAlreadyExistsException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleProjectAlreadyExists(
+            ProjectAlreadyExistsException exception, HttpServletRequest request) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), request, Map.of());
     }
 
     private org.springframework.http.ResponseEntity<ApiErrorResponse> response(

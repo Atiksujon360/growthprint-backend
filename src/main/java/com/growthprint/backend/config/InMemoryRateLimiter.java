@@ -25,21 +25,22 @@ public class InMemoryRateLimiter {
             return existing;
         });
 
-        // Clean up old entries periodically
+        // Clean up old entries more aggressively to prevent memory leaks
+        // Every 60 seconds, remove entries older than 2x the configured window
         if (now.getEpochSecond() % 60 == 0) {
-            buckets.entrySet().removeIf(entry -> entry.getValue().windowStart.isBefore(windowStart));
+            Instant cleanupThreshold = now.minus(window.multipliedBy(2));
+            buckets.entrySet().removeIf(entry -> entry.getValue().windowStart.isBefore(cleanupThreshold));
         }
 
         return bucket.count.get() <= maxRequests;
     }
 
     public String getClientIdentifier(HttpServletRequest request) {
-        // In production, use a trusted proxy configuration to get real client IP
-        // For now, use remote address as a simple identifier
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
+        // WARNING: Do not blindly trust X-Forwarded-For headers from untrusted clients.
+        // This header can be spoofed. Only use it when behind a trusted reverse proxy
+        // that validates and overwrites the header. For now, use remote address only.
+        // Future enhancement: Add app.trusted-proxies configuration and implement
+        // trusted proxy validation before using X-Forwarded-For.
         return request.getRemoteAddr();
     }
 
