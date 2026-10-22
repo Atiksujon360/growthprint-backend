@@ -2,7 +2,6 @@ package com.growthprint.backend.auth.service;
 
 import com.growthprint.backend.auth.entity.AccountStatus;
 import com.growthprint.backend.auth.entity.User;
-import com.growthprint.backend.auth.entity.UserRole;
 import com.growthprint.backend.auth.exception.AuthenticationFailedException;
 import com.growthprint.backend.auth.exception.UserNotFoundException;
 import com.growthprint.backend.auth.repository.UserRepository;
