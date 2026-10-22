@@ -2,6 +2,10 @@ package com.growthprint.backend.common.exception;
 
 import com.growthprint.backend.client.exception.ClientNotFoundException;
 import com.growthprint.backend.common.dto.ApiErrorResponse;
+import com.growthprint.backend.crm.lead.exception.CrmLeadAlreadyExistsException;
+import com.growthprint.backend.crm.lead.exception.CrmLeadConversionException;
+import com.growthprint.backend.crm.lead.exception.CrmLeadNotFoundException;
+import com.growthprint.backend.crm.lead.exception.InquiryNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -36,6 +40,30 @@ public class GlobalExceptionHandler {
     public org.springframework.http.ResponseEntity<ApiErrorResponse> handleClientNotFound(
             ClientNotFoundException exception, HttpServletRequest request) {
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(CrmLeadNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleCrmLeadNotFound(
+            CrmLeadNotFoundException exception, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(InquiryNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleInquiryNotFound(
+            InquiryNotFoundException exception, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(CrmLeadAlreadyExistsException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleCrmLeadAlreadyExists(
+            CrmLeadAlreadyExistsException exception, HttpServletRequest request) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(CrmLeadConversionException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleCrmLeadConversion(
+            CrmLeadConversionException exception, HttpServletRequest request) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
     }
 
     private org.springframework.http.ResponseEntity<ApiErrorResponse> response(
