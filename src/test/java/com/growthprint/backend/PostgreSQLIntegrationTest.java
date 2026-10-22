@@ -18,6 +18,9 @@ class PostgreSQLIntegrationTest {
 
 	@Container
 	@ServiceConnection
+	// Resource leak warning suppressed: Testcontainers @Container annotation
+	// manages lifecycle automatically
+	@SuppressWarnings("resource")
 	static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
 			DockerImageName.parse("postgres:16-alpine"))
 			.withDatabaseName("growthprint")
