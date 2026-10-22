@@ -49,7 +49,11 @@ public record CreateProjectCommand(
         List<String> deliverables
 ) {
     public CreateProjectCommand {
-        this.budgetSpent = budgetSpent != null ? budgetSpent : BigDecimal.ZERO;
-        this.deliverables = deliverables != null ? deliverables : List.of();
+        if (budgetSpent == null) {
+            budgetSpent = BigDecimal.ZERO;
+        }
+        if (deliverables == null) {
+            deliverables = List.of();
+        }
     }
 }

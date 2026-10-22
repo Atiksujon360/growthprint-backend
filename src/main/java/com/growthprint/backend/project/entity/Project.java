@@ -94,6 +94,10 @@ public class Project {
     public ServiceCategory getServiceCategory() { return serviceCategory; }
     public String getDescription() { return description; }
     public ProjectStatus getStatus() { return status; }
+
+    public void setStatus(ProjectStatus status) {
+        this.status = status;
+    }
     public Integer getProgressPercent() { return progressPercent; }
     public LocalDate getStartDate() { return startDate; }
     public LocalDate getTargetCompletionDate() { return targetCompletionDate; }

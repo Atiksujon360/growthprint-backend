@@ -26,11 +26,4 @@ public record ProjectResponse(
         String assignedLead,
         String updatedAt
 ) {
-    public record MilestoneResponse(
-            String id,
-            String title,
-            String dueDate,
-            String status
-    ) {
-    }
 }

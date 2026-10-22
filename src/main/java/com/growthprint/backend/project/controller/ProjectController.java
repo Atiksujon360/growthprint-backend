@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+import static org.springframework.web.bind.annotation.RequestMethod.PATCH;
+
 @RestController
 @RequestMapping("/api/v1/projects")
 @Tag(name = "Projects")
@@ -49,7 +51,7 @@ public class ProjectController {
         return projectService.create(command);
     }
 
-    @Patch("/{id}/status")
+    @RequestMapping(value = "/{id}/status", method = PATCH)
     @Operation(summary = "Update project status")
     @PreAuthorize("hasRole('ADMIN')")
     public ProjectResponse updateStatus(
