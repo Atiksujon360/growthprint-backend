@@ -8,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest(properties = {
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
 				+ "org.springframework.boot.orm.jpa.autoconfigure.HibernateJpaAutoConfiguration,"
-				+ "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
-		"spring.main.lazy-initialization=true"
+				+ "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration,"
+				+ "org.springframework.boot.autoconfigure.orm.jpa.JpaRepositoriesAutoConfiguration"
 })
 class HealthEndpointTest {
 
