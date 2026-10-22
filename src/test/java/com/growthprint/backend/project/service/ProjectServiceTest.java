@@ -1,6 +1,7 @@
 package com.growthprint.backend.project.service;
 
 import com.growthprint.backend.client.entity.Client;
+import com.growthprint.backend.client.entity.ClientEnums;
 import com.growthprint.backend.client.repository.ClientRepository;
 import com.growthprint.backend.project.dto.CreateMilestoneCommand;
 import com.growthprint.backend.project.dto.CreateProjectCommand;
@@ -59,8 +60,8 @@ class ProjectServiceTest {
                 "test@example.com",
                 null,
                 "https://example.com",
-                com.growthprint.backend.client.entity.ClientStatus.ACTIVE,
-                null,
+                ClientEnums.ClientStatus.ACTIVE,
+                        null,
                 null,
                 null,
                 LocalDate.now(),
