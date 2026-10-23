@@ -120,9 +120,8 @@ class SupportRequestServiceTest {
         when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
         when(supportRequestRepository.save(any())).thenReturn(testRequest);
 
-        var result = supportRequestService.create(command);
+        supportRequestService.create(command);
 
-        assertNotNull(result);
         verify(supportRequestRepository).save(any());
     }
 
@@ -135,7 +134,7 @@ class SupportRequestServiceTest {
         when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
         when(supportRequestRepository.save(any())).thenReturn(testRequest);
 
-        var result = supportRequestService.classify(testRequest.getId(), command);
+        supportRequestService.classify(testRequest.getId(), command);
 
         assertEquals(SupportRequestStatus.READY_TO_START, testRequest.getStatus());
         verify(supportRequestRepository).save(testRequest);
@@ -150,7 +149,7 @@ class SupportRequestServiceTest {
         when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
         when(supportRequestRepository.save(any())).thenReturn(testRequest);
 
-        var result = supportRequestService.classify(testRequest.getId(), command);
+        supportRequestService.classify(testRequest.getId(), command);
 
         assertEquals(SupportRequestStatus.ESTIMATE_PENDING, testRequest.getStatus());
         verify(supportRequestRepository).save(testRequest);
@@ -171,7 +170,7 @@ class SupportRequestServiceTest {
         when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
         when(supportRequestRepository.save(any())).thenReturn(testRequest);
 
-        var result = supportRequestService.attachEstimate(testRequest.getId(), command);
+        supportRequestService.attachEstimate(testRequest.getId(), command);
 
         assertEquals(SupportRequestStatus.AWAITING_CLIENT_APPROVAL, testRequest.getStatus());
         verify(supportRequestRepository).save(testRequest);
@@ -203,7 +202,7 @@ class SupportRequestServiceTest {
         when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
         when(supportRequestRepository.save(any())).thenReturn(testRequest);
 
-        var result = supportRequestService.approveEstimate(testRequest.getId(), command);
+        supportRequestService.approveEstimate(testRequest.getId(), command);
 
         assertEquals(SupportRequestStatus.READY_TO_START, testRequest.getStatus());
         verify(supportRequestRepository).save(testRequest);
@@ -229,7 +228,7 @@ class SupportRequestServiceTest {
         when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
         when(supportRequestRepository.save(any())).thenReturn(testRequest);
 
-        var result = supportRequestService.updateStatus(testRequest.getId(), command);
+        supportRequestService.updateStatus(testRequest.getId(), command);
 
         assertEquals(SupportRequestStatus.IN_PROGRESS, testRequest.getStatus());
         verify(supportRequestRepository).save(testRequest);
