@@ -6,6 +6,9 @@ import com.growthprint.backend.crm.lead.exception.CrmLeadAlreadyExistsException;
 import com.growthprint.backend.crm.lead.exception.CrmLeadConversionException;
 import com.growthprint.backend.crm.lead.exception.CrmLeadNotFoundException;
 import com.growthprint.backend.crm.lead.exception.InquiryNotFoundException;
+import com.growthprint.backend.invoice.exception.InvoiceAlreadyExistsException;
+import com.growthprint.backend.invoice.exception.InvalidInvoiceStatusTransitionException;
+import com.growthprint.backend.invoice.exception.InvoiceNotFoundException;
 import com.growthprint.backend.project.exception.ProjectAlreadyExistsException;
 import com.growthprint.backend.project.exception.ProjectNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -78,6 +81,24 @@ public class GlobalExceptionHandler {
     public org.springframework.http.ResponseEntity<ApiErrorResponse> handleProjectAlreadyExists(
             ProjectAlreadyExistsException exception, HttpServletRequest request) {
         return response(HttpStatus.CONFLICT, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(InvoiceNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleInvoiceNotFound(
+            InvoiceNotFoundException exception, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(InvoiceAlreadyExistsException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleInvoiceAlreadyExists(
+            InvoiceAlreadyExistsException exception, HttpServletRequest request) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(InvalidInvoiceStatusTransitionException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleInvalidStatusTransition(
+            InvalidInvoiceStatusTransitionException exception, HttpServletRequest request) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
     }
 
     private org.springframework.http.ResponseEntity<ApiErrorResponse> response(
