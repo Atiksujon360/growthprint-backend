@@ -8,9 +8,7 @@ import com.growthprint.backend.project.dto.MilestoneResponse;
 import com.growthprint.backend.project.dto.ProjectResponse;
 import com.growthprint.backend.project.dto.UpdateProjectStatusCommand;
 import com.growthprint.backend.project.entity.Milestone;
-import com.growthprint.backend.project.entity.MilestoneStatus;
 import com.growthprint.backend.project.entity.Project;
-import com.growthprint.backend.project.entity.ProjectStatus;
 import com.growthprint.backend.project.exception.ProjectAlreadyExistsException;
 import com.growthprint.backend.project.exception.ProjectNotFoundException;
 import com.growthprint.backend.project.repository.MilestoneRepository;
@@ -18,12 +16,13 @@ import com.growthprint.backend.project.repository.ProjectRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;

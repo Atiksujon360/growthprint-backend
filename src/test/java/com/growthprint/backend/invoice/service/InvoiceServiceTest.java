@@ -247,7 +247,7 @@ class InvoiceServiceTest {
         when(lineItemRepository.findByInvoiceId(testInvoice.getId())).thenReturn(List.of(testLineItem));
         when(clientRepository.findById(testInvoice.getClientId())).thenReturn(Optional.of(testClient));
 
-        var result = invoiceService.markPaid(testInvoice.getId(), command);
+        invoiceService.markPaid(testInvoice.getId(), command);
 
         assertEquals(InvoiceStatus.PAID, testInvoice.getStatus());
         assertNotNull(testInvoice.getPaidAt());

@@ -1,10 +1,6 @@
 package com.growthprint.backend.project.dto;
 
-import com.growthprint.backend.project.entity.ProjectStatus;
-import com.growthprint.backend.project.entity.ServiceCategory;
-
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 
 public record ProjectResponse(

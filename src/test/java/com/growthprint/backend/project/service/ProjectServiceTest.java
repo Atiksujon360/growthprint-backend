@@ -206,7 +206,7 @@ class ProjectServiceTest {
         when(milestoneRepository.findByProjectId(testProject.getId())).thenReturn(List.of());
         when(clientRepository.findById(testProject.getClientId())).thenReturn(Optional.of(testClient));
 
-        var result = projectService.updateStatus(testProject.getId(), command);
+        projectService.updateStatus(testProject.getId(), command);
 
         assertEquals(ProjectStatus.COMPLETED, testProject.getStatus());
         verify(projectRepository).save(testProject);

@@ -9,6 +9,8 @@ import com.growthprint.backend.crm.lead.exception.InquiryNotFoundException;
 import com.growthprint.backend.invoice.exception.InvoiceAlreadyExistsException;
 import com.growthprint.backend.invoice.exception.InvalidInvoiceStatusTransitionException;
 import com.growthprint.backend.invoice.exception.InvoiceNotFoundException;
+import com.growthprint.backend.outreach.exception.InvalidOutreachStatusTransitionException;
+import com.growthprint.backend.outreach.exception.OutreachDraftNotFoundException;
 import com.growthprint.backend.project.exception.ProjectAlreadyExistsException;
 import com.growthprint.backend.project.exception.ProjectNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -98,6 +100,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidInvoiceStatusTransitionException.class)
     public org.springframework.http.ResponseEntity<ApiErrorResponse> handleInvalidStatusTransition(
             InvalidInvoiceStatusTransitionException exception, HttpServletRequest request) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(OutreachDraftNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleOutreachDraftNotFound(
+            OutreachDraftNotFoundException exception, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(InvalidOutreachStatusTransitionException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleInvalidOutreachStatusTransition(
+            InvalidOutreachStatusTransitionException exception, HttpServletRequest request) {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
     }
 
