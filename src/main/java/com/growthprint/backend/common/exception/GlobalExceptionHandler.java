@@ -13,6 +13,8 @@ import com.growthprint.backend.outreach.exception.InvalidOutreachStatusTransitio
 import com.growthprint.backend.outreach.exception.OutreachDraftNotFoundException;
 import com.growthprint.backend.project.exception.ProjectAlreadyExistsException;
 import com.growthprint.backend.project.exception.ProjectNotFoundException;
+import com.growthprint.backend.support.exception.InvalidSupportRequestStatusTransitionException;
+import com.growthprint.backend.support.exception.SupportRequestNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -112,6 +114,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidOutreachStatusTransitionException.class)
     public org.springframework.http.ResponseEntity<ApiErrorResponse> handleInvalidOutreachStatusTransition(
             InvalidOutreachStatusTransitionException exception, HttpServletRequest request) {
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(SupportRequestNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleSupportRequestNotFound(
+            SupportRequestNotFoundException exception, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(InvalidSupportRequestStatusTransitionException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleInvalidSupportRequestStatusTransition(
+            InvalidSupportRequestStatusTransitionException exception, HttpServletRequest request) {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
     }
 
