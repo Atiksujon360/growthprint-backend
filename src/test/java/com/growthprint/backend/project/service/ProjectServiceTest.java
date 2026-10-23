@@ -5,8 +5,7 @@ import com.growthprint.backend.client.entity.ClientEnums;
 import com.growthprint.backend.client.repository.ClientRepository;
 import com.growthprint.backend.project.dto.CreateMilestoneCommand;
 import com.growthprint.backend.project.dto.CreateProjectCommand;
-import com.growthprint.backend.project.dto.UpdateProjectStatusCommand;
-import com.growthprint.backend.project.entity.Milestone;
+import com.growthprint.backend.project.dto.UpdateProjectStatusCommand; 
 import com.growthprint.backend.project.entity.MilestoneStatus;
 import com.growthprint.backend.project.entity.Project;
 import com.growthprint.backend.project.entity.ProjectStatus;
@@ -84,7 +83,8 @@ class ProjectServiceTest {
                 new BigDecimal("10000.00"),
                 new BigDecimal("5000.00"),
                 "Test Lead",
-                Instant.now(),
+                "[]",
+                        Instant.now(),
                 Instant.now()
         );
     }
@@ -93,7 +93,7 @@ class ProjectServiceTest {
     void findAll_ReturnsAllProjects() {
         when(projectRepository.findAll()).thenReturn(List.of(testProject));
         when(milestoneRepository.findByProjectId(testProject.getId())).thenReturn(List.of());
-        when(clientRepository.findById(testProject.getClientId())).thenReturn(Optional.of(testClient));
+        when(clientRepository.findAllById(List.of(testClient.getId()))).thenReturn(List.of(testClient));
 
         var result = projectService.findAll();
 
@@ -250,5 +250,35 @@ class ProjectServiceTest {
         when(projectRepository.findById(any())).thenReturn(Optional.empty());
 
         assertThrows(ProjectNotFoundException.class, () -> projectService.createMilestone(UUID.randomUUID(), command));
+    }
+
+    @Test
+    void create_PreservesDeliverables() {
+        List<String> deliverables = List.of("Deliverable 1", "Deliverable 2");
+        CreateProjectCommand command = new CreateProjectCommand(
+                "GP-PRJ-2026-002",
+                "New Project",
+                testClient.getId().toString(),
+                ServiceCategory.WEBSITE_MAINTENANCE,
+                "New Description",
+                ProjectStatus.DISCOVERY,
+                0,
+                LocalDate.now(),
+                LocalDate.now().plusMonths(6),
+                new BigDecimal("15000.00"),
+                null,
+                "New Lead",
+                deliverables);
+
+        when(projectRepository.existsByReference("GP-PRJ-2026-002")).thenReturn(false);
+        when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+        when(projectRepository.save(any())).thenReturn(testProject);
+        when(milestoneRepository.findByProjectId(any())).thenReturn(List.of());
+        when(clientRepository.findById(testProject.getClientId())).thenReturn(Optional.of(testClient));
+
+        var result = projectService.create(command);
+
+        assertNotNull(result);
+        verify(projectRepository).save(any(Project.class));
     }
 }

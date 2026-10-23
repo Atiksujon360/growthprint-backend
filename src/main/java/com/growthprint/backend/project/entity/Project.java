@@ -52,6 +52,9 @@ public class Project {
     @Column(name = "assigned_lead", length = 200)
     private String assignedLead;
 
+    @Column(columnDefinition = "jsonb")
+    private String deliverables;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -64,7 +67,8 @@ public class Project {
     public Project(UUID id, String reference, String name, UUID clientId, ServiceCategory serviceCategory,
                    String description, ProjectStatus status, Integer progressPercent,
                    LocalDate startDate, LocalDate targetCompletionDate, BigDecimal budgetTotal,
-                   BigDecimal budgetSpent, String assignedLead, Instant createdAt, Instant updatedAt) {
+            BigDecimal budgetSpent, String assignedLead, String deliverables,
+            Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.reference = reference;
         this.name = name;
@@ -78,6 +82,7 @@ public class Project {
         this.budgetTotal = budgetTotal;
         this.budgetSpent = budgetSpent;
         this.assignedLead = assignedLead;
+        this.deliverables = deliverables != null ? deliverables : "[]";
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -104,6 +109,10 @@ public class Project {
     public BigDecimal getBudgetTotal() { return budgetTotal; }
     public BigDecimal getBudgetSpent() { return budgetSpent; }
     public String getAssignedLead() { return assignedLead; }
+
+    public String getDeliverables() {
+        return deliverables;
+    }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }
