@@ -175,4 +175,11 @@ public class CrmLeadService {
 
         return CrmLeadResponse.from(crmLeadRepository.save(crmLead));
     }
+
+    @Transactional
+    public void delete(UUID id) {
+        CrmLead crmLead = crmLeadRepository.findById(id)
+                .orElseThrow(() -> new CrmLeadNotFoundException(id));
+        crmLeadRepository.delete(crmLead);
+    }
 }

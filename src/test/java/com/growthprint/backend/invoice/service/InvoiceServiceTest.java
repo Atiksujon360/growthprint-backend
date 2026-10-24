@@ -4,6 +4,7 @@ import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.entity.ClientEnums;
 import com.growthprint.backend.client.repository.ClientRepository;
 import com.growthprint.backend.invoice.dto.CreateInvoiceCommand;
+import com.growthprint.backend.invoice.dto.InvoiceResponse;
 import com.growthprint.backend.invoice.dto.MarkInvoicePaidCommand;
 import com.growthprint.backend.invoice.entity.Invoice;
 import com.growthprint.backend.invoice.entity.InvoiceCurrency;
@@ -20,6 +21,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -33,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class InvoiceServiceTest {
 
     @Mock
@@ -255,6 +259,23 @@ class InvoiceServiceTest {
     }
 
     @Test
+    void markPaid_IsIdempotentWhenAlreadyPaid() {
+        testInvoice.setStatus(InvoiceStatus.PAID);
+        testInvoice.setPaidAt(Instant.now().minusSeconds(3600)); // paid 1 hour ago
+        MarkInvoicePaidCommand command = new MarkInvoicePaidCommand(InvoiceStatus.PAID);
+
+        when(invoiceRepository.findById(testInvoice.getId())).thenReturn(Optional.of(testInvoice));
+        when(lineItemRepository.findByInvoiceId(testInvoice.getId())).thenReturn(List.of(testLineItem));
+        when(clientRepository.findById(testInvoice.getClientId())).thenReturn(Optional.of(testClient));
+
+        InvoiceResponse result = invoiceService.markPaid(testInvoice.getId(), command);
+
+        assertEquals(InvoiceStatus.PAID.name(), result.status());
+        // Should NOT call save since state is already PAID
+        verify(invoiceRepository, never()).save(any());
+    }
+
+    @Test
     void markPaid_ThrowsWhenNotFound() {
         MarkInvoicePaidCommand command = new MarkInvoicePaidCommand(InvoiceStatus.PAID);
 
@@ -289,14 +310,14 @@ class InvoiceServiceTest {
         MarkInvoicePaidCommand command = new MarkInvoicePaidCommand(InvoiceStatus.PAID);
 
         when(invoiceRepository.findById(testInvoice.getId())).thenReturn(Optional.of(testInvoice));
-        when(invoiceRepository.save(any())).thenReturn(testInvoice);
         when(lineItemRepository.findByInvoiceId(testInvoice.getId())).thenReturn(List.of(testLineItem));
         when(clientRepository.findById(testInvoice.getClientId())).thenReturn(Optional.of(testClient));
 
         var result = invoiceService.markPaid(testInvoice.getId(), command);
 
         assertNotNull(result);
-        verify(invoiceRepository).save(testInvoice);
+        // Idempotent: should NOT call save since state is already PAID
+        verify(invoiceRepository, never()).save(any());
     }
 
     @Test

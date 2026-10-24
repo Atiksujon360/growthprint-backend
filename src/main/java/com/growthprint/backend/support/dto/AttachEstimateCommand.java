@@ -16,6 +16,9 @@ public record AttachEstimateCommand(
         @DecimalMin(value = "0.00", message = "Hourly rate must be non-negative")
         BigDecimal hourlyRate,
 
+        @DecimalMin(value = "0.00", message = "Discount must be non-negative")
+        BigDecimal discount,
+
         @NotNull(message = "Delivery timeline days is required")
         @Min(value = 1, message = "Delivery timeline days must be at least 1")
         Integer deliveryTimelineDays,

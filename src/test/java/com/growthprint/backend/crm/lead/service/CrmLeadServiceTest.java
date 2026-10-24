@@ -190,4 +190,37 @@ class CrmLeadServiceTest {
                 .isInstanceOf(CrmLeadNotFoundException.class)
                 .hasMessageContaining("CRM lead not found");
     }
+
+    @Test
+    void deleteRemovesCrmLead() {
+        UUID id = UUID.randomUUID();
+        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository);
+
+        CrmLead existingLead = new CrmLead(
+                id, "Tech Corp", "https://techcorp.com", "Technology", "San Francisco, CA",
+                "John Doe", "john@techcorp.com", "CTO", CrmLeadSource.PUBLIC_DIRECTORY,
+                null, Instant.now(), CrmLeadServiceCategory.SOFTWARE_DEV,
+                "Need custom platform", "Research completed", 85, 22, 21, 20, 22,
+                CrmLeadPipelineStage.QUALIFIED, null, "Schedule discovery call", false, "Warm lead",
+                null, Instant.now(), Instant.now()
+        );
+
+        when(crmLeadRepository.findById(id)).thenReturn(Optional.of(existingLead));
+
+        service.delete(id);
+
+        verify(crmLeadRepository).delete(existingLead);
+    }
+
+    @Test
+    void deleteFailsWhenNotFound() {
+        UUID id = UUID.randomUUID();
+        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository);
+
+        when(crmLeadRepository.findById(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.delete(id))
+                .isInstanceOf(CrmLeadNotFoundException.class)
+                .hasMessageContaining("CRM lead not found");
+    }
 }

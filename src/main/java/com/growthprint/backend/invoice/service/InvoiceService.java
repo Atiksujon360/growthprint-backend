@@ -157,8 +157,8 @@ public class InvoiceService {
         }
 
         if (invoice.getStatus() == InvoiceStatus.PAID) {
-            // Idempotent: allow repeated reconciliation without error
-            // paidAt may be updated to current timestamp
+            // Idempotent: return existing state without changes
+            return toResponseWithLineItems(invoice, new HashMap<>());
         }
 
         invoice.setStatus(InvoiceStatus.PAID);

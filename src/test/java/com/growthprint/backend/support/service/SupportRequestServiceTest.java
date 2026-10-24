@@ -8,6 +8,7 @@ import com.growthprint.backend.support.dto.*;
 import com.growthprint.backend.support.entity.*;
 import com.growthprint.backend.support.exception.InvalidSupportRequestStatusTransitionException;
 import com.growthprint.backend.support.exception.SupportRequestNotFoundException;
+import com.growthprint.backend.support.repository.SupportEstimateRepository;
 import com.growthprint.backend.support.repository.SupportRequestRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,9 @@ class SupportRequestServiceTest {
 
     @Mock
     private SupportRequestRepository supportRequestRepository;
+
+    @Mock
+    private SupportEstimateRepository supportEstimateRepository;
 
     @Mock
     private ClientRepository clientRepository;
@@ -161,6 +165,7 @@ class SupportRequestServiceTest {
         AttachEstimateCommand command = new AttachEstimateCommand(
                 new BigDecimal("5.0"),
                 new BigDecimal("100.00"),
+                new BigDecimal("50.00"),
                 7,
                 "Test explanation"
         );
@@ -169,11 +174,13 @@ class SupportRequestServiceTest {
         when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
         when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
         when(supportRequestRepository.save(any())).thenReturn(testRequest);
+        when(supportEstimateRepository.save(any())).thenReturn(new SupportEstimate());
 
         supportRequestService.attachEstimate(testRequest.getId(), command);
 
         assertEquals(SupportRequestStatus.AWAITING_CLIENT_APPROVAL, testRequest.getStatus());
         verify(supportRequestRepository).save(testRequest);
+        verify(supportEstimateRepository).save(any(SupportEstimate.class));
     }
 
     @Test
@@ -182,6 +189,7 @@ class SupportRequestServiceTest {
         AttachEstimateCommand command = new AttachEstimateCommand(
                 new BigDecimal("5.0"),
                 new BigDecimal("100.00"),
+                new BigDecimal("50.00"),
                 7,
                 "Test explanation"
         );
@@ -193,19 +201,56 @@ class SupportRequestServiceTest {
     }
 
     @Test
+    void attachEstimate_ThrowsWhenDiscountExceedsSubtotal() {
+        testRequest.setStatus(SupportRequestStatus.ESTIMATE_PENDING);
+        AttachEstimateCommand command = new AttachEstimateCommand(
+                new BigDecimal("5.0"),
+                new BigDecimal("100.00"),
+                new BigDecimal("600.00"), // discount exceeds subtotal (5 * 100 = 500)
+                7,
+                "Test explanation"
+        );
+
+        when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> supportRequestService.attachEstimate(testRequest.getId(), command));
+    }
+
+    @Test
     void approveEstimate_UpdatesStatusToReadyToStart() {
         testRequest.setStatus(SupportRequestStatus.AWAITING_CLIENT_APPROVAL);
         ApproveEstimateCommand command = new ApproveEstimateCommand("admin@example.com");
 
+        SupportEstimate testEstimate = new SupportEstimate();
+        testEstimate.setId(UUID.randomUUID());
+        testEstimate.setRequestId(testRequest.getId());
+        testEstimate.setEstimatedHours(new BigDecimal("5.0"));
+        testEstimate.setHourlyRate(new BigDecimal("100.00"));
+        testEstimate.setSubtotal(new BigDecimal("500.00"));
+        testEstimate.setDiscount(BigDecimal.ZERO);
+        testEstimate.setTotalAmount(new BigDecimal("500.00"));
+        testEstimate.setCurrency("USD");
+        testEstimate.setDeliveryTimelineDays(7);
+        testEstimate.setExplanation("Test explanation");
+        testEstimate.setStatus(SupportEstimateStatus.PENDING_APPROVAL);
+        testEstimate.setCreatedAt(Instant.now());
+
         when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
+        when(supportEstimateRepository.findByRequestId(testRequest.getId())).thenReturn(Optional.of(testEstimate));
         when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
         when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
         when(supportRequestRepository.save(any())).thenReturn(testRequest);
+        when(supportEstimateRepository.save(any())).thenReturn(testEstimate);
 
         supportRequestService.approveEstimate(testRequest.getId(), command);
 
         assertEquals(SupportRequestStatus.READY_TO_START, testRequest.getStatus());
+        assertEquals(SupportEstimateStatus.ACCEPTED, testEstimate.getStatus());
+        assertEquals("admin@example.com", testEstimate.getAcceptedBy());
+        assertNotNull(testEstimate.getAcceptedAt());
         verify(supportRequestRepository).save(testRequest);
+        verify(supportEstimateRepository).save(testEstimate);
     }
 
     @Test
@@ -221,6 +266,45 @@ class SupportRequestServiceTest {
 
     @Test
     void updateStatus_UpdatesStatus() {
+        testRequest.setStatus(SupportRequestStatus.READY_TO_START);
+        UpdateRequestStatusCommand command = new UpdateRequestStatusCommand("IN_PROGRESS");
+
+        when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
+        when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+        when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
+        when(supportRequestRepository.save(any())).thenReturn(testRequest);
+
+        supportRequestService.updateStatus(testRequest.getId(), command);
+
+        assertEquals(SupportRequestStatus.IN_PROGRESS, testRequest.getStatus());
+        verify(supportRequestRepository).save(testRequest);
+    }
+
+    @Test
+    void updateStatus_ThrowsForInvalidTransition() {
+        testRequest.setStatus(SupportRequestStatus.COMPLETED);
+        UpdateRequestStatusCommand command = new UpdateRequestStatusCommand("NEW");
+
+        when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
+
+        assertThrows(InvalidSupportRequestStatusTransitionException.class,
+                () -> supportRequestService.updateStatus(testRequest.getId(), command));
+    }
+
+    @Test
+    void updateStatus_ThrowsForDirectNewToEstimatePending() {
+        testRequest.setStatus(SupportRequestStatus.NEW);
+        UpdateRequestStatusCommand command = new UpdateRequestStatusCommand("ESTIMATE_PENDING");
+
+        when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
+
+        assertThrows(InvalidSupportRequestStatusTransitionException.class,
+                () -> supportRequestService.updateStatus(testRequest.getId(), command));
+    }
+
+    @Test
+    void updateStatus_AllowsIdempotentSameStatus() {
+        testRequest.setStatus(SupportRequestStatus.IN_PROGRESS);
         UpdateRequestStatusCommand command = new UpdateRequestStatusCommand("IN_PROGRESS");
 
         when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));

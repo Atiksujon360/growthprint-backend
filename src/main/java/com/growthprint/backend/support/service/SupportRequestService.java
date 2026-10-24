@@ -8,6 +8,7 @@ import com.growthprint.backend.support.dto.*;
 import com.growthprint.backend.support.entity.*;
 import com.growthprint.backend.support.exception.InvalidSupportRequestStatusTransitionException;
 import com.growthprint.backend.support.exception.SupportRequestNotFoundException;
+import com.growthprint.backend.support.repository.SupportEstimateRepository;
 import com.growthprint.backend.support.repository.SupportRequestRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,14 +24,17 @@ import java.util.stream.Collectors;
 public class SupportRequestService {
 
     private final SupportRequestRepository supportRequestRepository;
+    private final SupportEstimateRepository supportEstimateRepository;
     private final ClientRepository clientRepository;
     private final ProjectRepository projectRepository;
 
     public SupportRequestService(
             SupportRequestRepository supportRequestRepository,
+            SupportEstimateRepository supportEstimateRepository,
             ClientRepository clientRepository,
             ProjectRepository projectRepository) {
         this.supportRequestRepository = supportRequestRepository;
+        this.supportEstimateRepository = supportEstimateRepository;
         this.clientRepository = clientRepository;
         this.projectRepository = projectRepository;
     }
@@ -106,6 +110,34 @@ public class SupportRequestService {
                     "Estimates can only be attached to requests in ESTIMATE_PENDING status");
         }
 
+        // Calculate estimate totals
+        BigDecimal subtotal = command.estimatedHours().multiply(command.hourlyRate())
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal discount = command.discount() != null ? command.discount() : BigDecimal.ZERO;
+
+        // Validate discount does not exceed subtotal
+        if (discount.compareTo(subtotal) > 0) {
+            throw new IllegalArgumentException("Discount cannot exceed subtotal");
+        }
+
+        BigDecimal totalAmount = subtotal.subtract(discount)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        // Create and persist the estimate
+        SupportEstimate estimate = new SupportEstimate();
+        estimate.setRequestId(request.getId());
+        estimate.setEstimatedHours(command.estimatedHours());
+        estimate.setHourlyRate(command.hourlyRate());
+        estimate.setSubtotal(subtotal);
+        estimate.setDiscount(discount);
+        estimate.setTotalAmount(totalAmount);
+        estimate.setCurrency("USD");
+        estimate.setDeliveryTimelineDays(command.deliveryTimelineDays());
+        estimate.setExplanation(command.explanation());
+        estimate.setStatus(SupportEstimateStatus.PENDING_APPROVAL);
+
+        supportEstimateRepository.save(estimate);
+
         request.setStatus(SupportRequestStatus.AWAITING_CLIENT_APPROVAL);
 
         SupportRequest savedRequest = supportRequestRepository.save(request);
@@ -121,6 +153,14 @@ public class SupportRequestService {
             throw new InvalidSupportRequestStatusTransitionException(
                     "Estimates can only be approved for requests in AWAITING_CLIENT_APPROVAL status");
         }
+
+        // Update the estimate status
+        SupportEstimate estimate = supportEstimateRepository.findByRequestId(request.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Estimate not found for this request"));
+        estimate.setStatus(SupportEstimateStatus.ACCEPTED);
+        estimate.setAcceptedAt(Instant.now());
+        estimate.setAcceptedBy(command.approvedBy());
+        supportEstimateRepository.save(estimate);
 
         request.setStatus(SupportRequestStatus.READY_TO_START);
 
@@ -147,7 +187,41 @@ public class SupportRequestService {
     }
 
     private boolean isValidStatusTransition(SupportRequestStatus current, SupportRequestStatus newStatus) {
-        return true;
+        // Allow same status (idempotent)
+        if (current == newStatus) {
+            return true;
+        }
+
+        // Define valid transitions based on frontend workflow
+        switch (current) {
+            case NEW:
+                // NEW must go through classification first
+                return newStatus == SupportRequestStatus.NEEDS_CLASSIFICATION;
+            case NEEDS_CLASSIFICATION:
+                // After classification, depends on category (handled in classify() method)
+                // Direct transitions only via classify() operation
+                return false;
+            case ESTIMATE_PENDING:
+                // Only transition via attachEstimate operation
+                return newStatus == SupportRequestStatus.AWAITING_CLIENT_APPROVAL;
+            case AWAITING_CLIENT_APPROVAL:
+                // Only transition via approveEstimate operation
+                return newStatus == SupportRequestStatus.READY_TO_START;
+            case READY_TO_START:
+                return newStatus == SupportRequestStatus.IN_PROGRESS
+                        || newStatus == SupportRequestStatus.COMPLETED;
+            case IN_PROGRESS:
+                return newStatus == SupportRequestStatus.WAITING_FOR_CLIENT
+                        || newStatus == SupportRequestStatus.COMPLETED;
+            case WAITING_FOR_CLIENT:
+                return newStatus == SupportRequestStatus.IN_PROGRESS
+                        || newStatus == SupportRequestStatus.COMPLETED;
+            case COMPLETED:
+                // No transitions from COMPLETED
+                return false;
+            default:
+                return false;
+        }
     }
 
     private String generateReference() {
@@ -167,6 +241,26 @@ public class SupportRequestService {
                         .orElse(null)
                 : null;
 
+        // Fetch estimate if exists
+        final SupportRequestResponse.SupportEstimateResponse estimate = supportEstimateRepository.findByRequestId(request.getId())
+                .map(est -> new SupportRequestResponse.SupportEstimateResponse(
+                        est.getId().toString(),
+                        est.getRequestId().toString(),
+                        est.getEstimatedHours().toString(),
+                        est.getHourlyRate().toString(),
+                        est.getSubtotal().toString(),
+                        est.getDiscount().toString(),
+                        est.getTotalAmount().toString(),
+                        est.getCurrency(),
+                        est.getDeliveryTimelineDays(),
+                        est.getExplanation(),
+                        est.getStatus().name(),
+                        est.getCreatedAt().toString(),
+                        est.getAcceptedAt() != null ? est.getAcceptedAt().toString() : null,
+                        est.getAcceptedBy()
+                ))
+                .orElse(null);
+
         return new SupportRequestResponse(
                 request.getId().toString(),
                 request.getReference(),
@@ -184,7 +278,7 @@ public class SupportRequestService {
                 request.getResolutionSummary(),
                 request.getCreatedAt().toString(),
                 request.getUpdatedAt().toString(),
-                null
+                estimate
         );
     }
 }

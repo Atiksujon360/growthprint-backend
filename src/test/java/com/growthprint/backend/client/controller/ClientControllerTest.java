@@ -15,6 +15,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -95,5 +97,26 @@ class ClientControllerTest {
         assertThatThrownBy(() -> controller.getById(id))
                 .isInstanceOf(ClientNotFoundException.class)
                 .hasMessageContaining("Client not found with id: " + id);
+    }
+
+    @Test
+    void updateModifiesClient() {
+        UUID id = UUID.randomUUID();
+
+        ClientResponse response = new ClientResponse(
+                id, "Updated Corp", "Updated Corporation LLC", "updated@corp.com", "+1-555-9999",
+                "https://updated.com", ClientEnums.ClientStatus.ACTIVE, ClientEnums.RetainerTier.PRO_GROWTH,
+                40, 25, LocalDate.of(2024, 1, 15), "Jane Smith", ClientEnums.BillingCurrency.USD, "Updated notes"
+        );
+
+        when(clientService.update(eq(id), any())).thenReturn(response);
+
+        ClientController controller = new ClientController(clientService);
+        ClientResponse result = controller.update(id, java.util.Map.of("name", "Updated Corp"));
+
+        assertThat(result.id()).isEqualTo(id);
+        assertThat(result.name()).isEqualTo("Updated Corp");
+        assertThat(result.contactEmail()).isEqualTo("updated@corp.com");
+        assertThat(result.notes()).isEqualTo("Updated notes");
     }
 }
