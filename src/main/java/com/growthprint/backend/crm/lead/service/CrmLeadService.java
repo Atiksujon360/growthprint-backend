@@ -11,6 +11,7 @@ import com.growthprint.backend.crm.lead.exception.InquiryNotFoundException;
 import com.growthprint.backend.crm.lead.repository.CrmLeadRepository;
 import com.growthprint.backend.lead.entity.Lead;
 import com.growthprint.backend.lead.repository.LeadRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,14 +29,11 @@ public class CrmLeadService {
     private final LeadRepository leadRepository;
     private final Clock clock;
 
-    public CrmLeadService(CrmLeadRepository crmLeadRepository, LeadRepository leadRepository) {
-        this(crmLeadRepository, leadRepository, Clock.systemUTC());
-    }
-
+    @Autowired
     public CrmLeadService(CrmLeadRepository crmLeadRepository, LeadRepository leadRepository, Clock clock) {
         this.crmLeadRepository = crmLeadRepository;
         this.leadRepository = leadRepository;
-        this.clock = clock;
+        this.clock = clock != null ? clock : Clock.systemUTC();
     }
 
     @Transactional(readOnly = true)

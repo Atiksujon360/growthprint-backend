@@ -53,7 +53,7 @@ app:
     jwt:
       # JWT signing secret - MUST be set in production via environment variable
       # Generate a secure random key: openssl rand -base64 64
-      secret: "${JWT_SECRET:}"
+      secret: "${JWT_SECRET:default-dev-secret-key-for-growthprint-backend-min-32-chars}"
       # Token expiration time (default: 1 hour)
       expiration: 1h
       issuer: growthprint-backend
