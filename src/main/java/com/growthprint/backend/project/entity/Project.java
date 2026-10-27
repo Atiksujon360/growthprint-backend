@@ -2,6 +2,8 @@ package com.growthprint.backend.project.entity;
 
 import jakarta.persistence.*;
 import jakarta.persistence.PreUpdate;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.Instant;
@@ -52,7 +54,7 @@ public class Project {
     @Column(name = "assigned_lead", length = 200)
     private String assignedLead;
 
-    @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String deliverables;
 
     @Column(name = "created_at", nullable = false)

@@ -3,6 +3,8 @@ package com.growthprint.backend.outreach.entity;
 import com.growthprint.backend.project.entity.ServiceCategory;
 import jakarta.persistence.*;
 import jakarta.persistence.PreUpdate;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -38,7 +40,7 @@ public class OutreachDraft {
     @Enumerated(EnumType.STRING)
     private ServiceCategory relevantService;
 
-    @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String riskFlags;
 
     @Enumerated(EnumType.STRING)

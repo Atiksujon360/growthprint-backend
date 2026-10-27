@@ -35,6 +35,9 @@ public class User {
     @Column(name = "account_status", nullable = false, length = 20)
     private AccountStatus accountStatus;
 
+    @Column(name = "client_id")
+    private UUID clientId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -45,13 +48,14 @@ public class User {
     }
 
     public User(UUID id, String email, String normalizedEmail, String passwordHash,
-                UserRole role, AccountStatus accountStatus, Instant createdAt, Instant updatedAt) {
+                UserRole role, AccountStatus accountStatus, UUID clientId, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.email = email;
         this.normalizedEmail = normalizedEmail;
         this.passwordHash = passwordHash;
         this.role = role;
         this.accountStatus = accountStatus;
+        this.clientId = clientId;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -83,6 +87,10 @@ public class User {
 
     public AccountStatus getAccountStatus() {
         return accountStatus;
+    }
+
+    public UUID getClientId() {
+        return clientId;
     }
 
     public Instant getCreatedAt() {

@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,6 +36,13 @@ public class ProjectController {
     @PreAuthorize("hasRole('ADMIN')")
     public List<ProjectResponse> list() {
         return projectService.findAll();
+    }
+
+    @GetMapping("/my")
+    @Operation(summary = "List projects for authenticated client")
+    @PreAuthorize("hasRole('CLIENT')")
+    public List<ProjectResponse> listMyProjects(@AuthenticationPrincipal String userId) {
+        return projectService.findByClientId(UUID.fromString(userId));
     }
 
     @GetMapping("/{id}")

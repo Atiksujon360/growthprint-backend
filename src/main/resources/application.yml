@@ -42,7 +42,7 @@ management:
       show-details: never
 
 server:
-  port: 8080
+  port: 8090
 
 app:
   admin-endpoints:

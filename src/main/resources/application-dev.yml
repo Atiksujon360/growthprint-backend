@@ -1,0 +1,19 @@
+# Development profile configuration
+# This file is committed to source control and contains safe, non-sensitive configuration
+# Actual credentials are loaded from .env file (which is git-ignored)
+
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    com.growthprint.backend: DEBUG
+    org.springframework.security: DEBUG

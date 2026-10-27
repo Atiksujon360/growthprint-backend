@@ -63,6 +63,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/leads/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/crm-leads/**").hasRole("ADMIN")
 
+                        // Development-only seed endpoint - requires ADMIN role and dev profile
+                        // Note: Only active when spring.profiles.active includes "dev" or "development"
+                        .requestMatchers("/api/v1/dev/seed").hasRole("ADMIN")
+
                         // Deny all other requests
                         .anyRequest().denyAll()
                 )

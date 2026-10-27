@@ -38,6 +38,7 @@ class SecurityIntegrationTest {
                 "hashedPassword",
                 UserRole.ADMIN,
                 AccountStatus.ACTIVE,
+                null,
                 Instant.now(),
                 Instant.now()
         );
@@ -59,6 +60,7 @@ class SecurityIntegrationTest {
                 "hashedPassword",
                 UserRole.CLIENT,
                 AccountStatus.ACTIVE,
+                null,
                 Instant.now(),
                 Instant.now()
         );
@@ -87,6 +89,7 @@ class SecurityIntegrationTest {
                 "hashedPassword",
                 UserRole.CLIENT,
                 AccountStatus.ACTIVE,
+                null,
                 Instant.now(),
                 Instant.now()
         );
@@ -152,6 +155,7 @@ class SecurityIntegrationTest {
                 "hashedPassword",
                 UserRole.CLIENT,
                 AccountStatus.ACTIVE,
+                null,
                 Instant.now(),
                 Instant.now()
         );

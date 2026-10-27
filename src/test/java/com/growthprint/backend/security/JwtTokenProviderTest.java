@@ -37,6 +37,7 @@ class JwtTokenProviderTest {
                 "hashedPassword",
                 UserRole.ADMIN,
                 AccountStatus.ACTIVE,
+                null,
                 Instant.now(),
                 Instant.now()
         );
@@ -56,6 +57,7 @@ class JwtTokenProviderTest {
                 "hashedPassword",
                 UserRole.ADMIN,
                 AccountStatus.ACTIVE,
+                null,
                 Instant.now(),
                 Instant.now()
         );
@@ -80,6 +82,7 @@ class JwtTokenProviderTest {
                 "hashedPassword",
                 UserRole.ADMIN,
                 AccountStatus.ACTIVE,
+                null,
                 Instant.now(),
                 Instant.now()
         );
@@ -100,6 +103,7 @@ class JwtTokenProviderTest {
                 "hashedPassword",
                 UserRole.ADMIN,
                 AccountStatus.ACTIVE,
+                null,
                 Instant.now(),
                 Instant.now()
         );
@@ -119,6 +123,7 @@ class JwtTokenProviderTest {
                 "hashedPassword",
                 UserRole.CLIENT,
                 AccountStatus.ACTIVE,
+                null,
                 Instant.now(),
                 Instant.now()
         );

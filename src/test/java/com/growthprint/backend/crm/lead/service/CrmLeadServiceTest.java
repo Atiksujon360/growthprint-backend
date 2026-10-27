@@ -103,7 +103,7 @@ class CrmLeadServiceTest {
     @Test
     void convertFromInquiryFailsWhenInquiryNotFound() {
         UUID inquiryId = UUID.randomUUID();
-        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository);
+        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository, Clock.systemUTC());
 
         when(crmLeadRepository.findByInquiryId(inquiryId)).thenReturn(Optional.empty());
         when(leadRepository.findById(inquiryId)).thenReturn(Optional.empty());
@@ -124,7 +124,7 @@ class CrmLeadServiceTest {
     @Test
     void convertFromInquiryFailsWhenInquiryLacksConsent() {
         UUID inquiryId = UUID.randomUUID();
-        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository);
+        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository, Clock.systemUTC());
 
         when(crmLeadRepository.findByInquiryId(inquiryId)).thenReturn(Optional.empty());
         Lead inquiry = new Lead(
@@ -180,7 +180,7 @@ class CrmLeadServiceTest {
     @Test
     void updatePipelineStageFailsWhenNotFound() {
         UUID id = UUID.randomUUID();
-        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository);
+        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository, Clock.systemUTC());
 
         when(crmLeadRepository.findById(id)).thenReturn(Optional.empty());
 
@@ -194,7 +194,7 @@ class CrmLeadServiceTest {
     @Test
     void deleteRemovesCrmLead() {
         UUID id = UUID.randomUUID();
-        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository);
+        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository, Clock.systemUTC());
 
         CrmLead existingLead = new CrmLead(
                 id, "Tech Corp", "https://techcorp.com", "Technology", "San Francisco, CA",
@@ -215,7 +215,7 @@ class CrmLeadServiceTest {
     @Test
     void deleteFailsWhenNotFound() {
         UUID id = UUID.randomUUID();
-        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository);
+        CrmLeadService service = new CrmLeadService(crmLeadRepository, leadRepository, Clock.systemUTC());
 
         when(crmLeadRepository.findById(id)).thenReturn(Optional.empty());
 

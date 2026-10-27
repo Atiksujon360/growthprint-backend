@@ -34,13 +34,15 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final MilestoneRepository milestoneRepository;
     private final ClientRepository clientRepository;
+    private final com.growthprint.backend.auth.repository.UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
     public ProjectService(ProjectRepository projectRepository, MilestoneRepository milestoneRepository,
-                          ClientRepository clientRepository) {
+                          ClientRepository clientRepository, com.growthprint.backend.auth.repository.UserRepository userRepository) {
         this.projectRepository = projectRepository;
         this.milestoneRepository = milestoneRepository;
         this.clientRepository = clientRepository;
+        this.userRepository = userRepository;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -78,6 +80,35 @@ public class ProjectService {
         }
 
         return toResponseWithMilestones(project, clientMap);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectResponse> findByClientId(UUID userId) {
+        // Get user's client ID
+        com.growthprint.backend.auth.entity.User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ProjectNotFoundException("User not found"));
+
+        if (user.getClientId() == null) {
+            return List.of();
+        }
+
+        List<Project> projects = projectRepository.findByClientId(user.getClientId());
+
+        // Batch fetch all clients to avoid N+1 queries
+        List<UUID> clientIds = projects.stream()
+                        .map(Project::getClientId)
+                        .distinct()
+                        .toList();
+
+        Map<UUID, Client> clientMap = new HashMap<>();
+        if (!clientIds.isEmpty()) {
+            clientRepository.findAllById(clientIds).forEach(client ->
+                    clientMap.put(client.getId(), client));
+        }
+
+        return projects.stream()
+                        .map(project -> toResponseWithMilestones(project, clientMap))
+                .collect(Collectors.toList());
     }
 
     @Transactional
