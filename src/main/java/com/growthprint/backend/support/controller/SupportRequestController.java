@@ -52,6 +52,15 @@ public class SupportRequestController {
         return supportRequestService.create(command);
     }
 
+    @PostMapping("/my")
+    @Operation(summary = "Create a support request for authenticated client")
+    @PreAuthorize("hasRole('CLIENT')")
+    public SupportRequestResponse createMyRequest(
+            @RequestBody CreateMySupportRequestCommand command,
+            @AuthenticationPrincipal String userId) {
+        return supportRequestService.createMyRequest(command, userId);
+    }
+
     @PostMapping("/{id}/classify")
     @Operation(summary = "Classify a support request")
     @PreAuthorize("hasRole('ADMIN')")
@@ -71,6 +80,16 @@ public class SupportRequestController {
     @PreAuthorize("hasRole('ADMIN')")
     public SupportRequestResponse approveEstimate(@PathVariable UUID id, @RequestBody ApproveEstimateCommand command) {
         return supportRequestService.approveEstimate(id, command);
+    }
+
+    @PostMapping("/my/{id}/approve-estimate")
+    @Operation(summary = "Approve an estimate for authenticated client's support request")
+    @PreAuthorize("hasRole('CLIENT')")
+    public SupportRequestResponse approveMyEstimate(
+            @PathVariable UUID id,
+            @RequestBody ApproveEstimateCommand command,
+            @AuthenticationPrincipal String userId) {
+        return supportRequestService.approveMyEstimate(id, command, userId);
     }
 
     @PatchMapping("/{id}/status")

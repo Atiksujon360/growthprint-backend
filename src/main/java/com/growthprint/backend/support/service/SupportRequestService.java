@@ -108,6 +108,43 @@ public class SupportRequestService {
     }
 
     @Transactional
+    public SupportRequestResponse createMyRequest(CreateMySupportRequestCommand command, String userId) {
+        User user = authService.getUserById(UUID.fromString(userId));
+        if (user.getClientId() == null) {
+            throw new IllegalArgumentException("User is not associated with a client");
+        }
+
+        Client client = clientRepository.findById(user.getClientId())
+                .orElseThrow(() -> new IllegalArgumentException("Client not found"));
+
+        Project project = null;
+        if (command.projectId() != null) {
+            project = projectRepository.findById(UUID.fromString(command.projectId()))
+                    .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+            // Verify project belongs to the client
+            if (!project.getClientId().equals(user.getClientId())) {
+                throw new IllegalArgumentException("Project does not belong to the authenticated client");
+            }
+        }
+
+        String reference = generateReference();
+
+        SupportRequest request = new SupportRequest();
+        request.setReference(reference);
+        request.setClientId(client.getId());
+        request.setProjectId(project != null ? project.getId() : null);
+        request.setTitle(command.title());
+        request.setCategory(SupportCategory.valueOf(command.category()));
+        request.setDescription(command.description());
+        request.setBusinessImpact(BusinessImpact.valueOf(command.businessImpact()));
+        request.setUrgency(Urgency.valueOf(command.urgency()));
+        request.setStatus(SupportRequestStatus.NEW);
+
+        SupportRequest savedRequest = supportRequestRepository.save(request);
+        return toResponse(savedRequest);
+    }
+
+    @Transactional
     public SupportRequestResponse classify(UUID id, ClassifyRequestCommand command) {
         SupportRequest request = supportRequestRepository.findById(id)
                 .orElseThrow(() -> new SupportRequestNotFoundException("Support request not found"));
@@ -173,6 +210,41 @@ public class SupportRequestService {
     public SupportRequestResponse approveEstimate(UUID id, ApproveEstimateCommand command) {
         SupportRequest request = supportRequestRepository.findById(id)
                 .orElseThrow(() -> new SupportRequestNotFoundException("Support request not found"));
+
+        if (request.getStatus() != SupportRequestStatus.AWAITING_CLIENT_APPROVAL) {
+            throw new InvalidSupportRequestStatusTransitionException(
+                    "Estimates can only be approved for requests in AWAITING_CLIENT_APPROVAL status");
+        }
+
+        // Update the estimate status
+        SupportEstimate estimate = supportEstimateRepository.findByRequestId(request.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Estimate not found for this request"));
+        estimate.setStatus(SupportEstimateStatus.ACCEPTED);
+        estimate.setAcceptedAt(Instant.now());
+        estimate.setAcceptedBy(command.approvedBy());
+        supportEstimateRepository.save(estimate);
+
+        request.setStatus(SupportRequestStatus.READY_TO_START);
+
+        SupportRequest savedRequest = supportRequestRepository.save(request);
+        return toResponse(savedRequest);
+    }
+
+    @Transactional
+    public SupportRequestResponse approveMyEstimate(UUID id, ApproveEstimateCommand command, String userId) {
+        // Resolve authenticated user and verify client association
+        User user = authService.getUserById(UUID.fromString(userId));
+        if (user.getClientId() == null) {
+            throw new IllegalArgumentException("User is not associated with a client");
+        }
+
+        // Fetch support request and verify ownership
+        SupportRequest request = supportRequestRepository.findById(id)
+                .orElseThrow(() -> new SupportRequestNotFoundException("Support request not found"));
+
+        if (!request.getClientId().equals(user.getClientId())) {
+            throw new IllegalArgumentException("Support request does not belong to the authenticated client");
+        }
 
         if (request.getStatus() != SupportRequestStatus.AWAITING_CLIENT_APPROVAL) {
             throw new InvalidSupportRequestStatusTransitionException(

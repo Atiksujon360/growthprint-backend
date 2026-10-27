@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Cache Maven packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+
+    - name: Build with Maven
+      run: ./mvnw.cmd clean compile
+
+    - name: Run unit tests
+      run: ./mvnw.cmd test
+
+    - name: Run integration tests (with Docker)
+      run: ./mvnw.cmd test -Dtest=PostgreSQLIntegrationTest,FlywayMigrationTest,CrmLeadRepositoryIntegrationTest
+      if: false # Disabled until Docker is available in CI
+
+    - name: Build package
+      run: ./mvnw.cmd package
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: growthprint-backend-jar
+        path: target/*.jar

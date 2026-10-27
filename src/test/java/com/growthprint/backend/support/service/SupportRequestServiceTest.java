@@ -56,22 +56,27 @@ class SupportRequestServiceTest {
     private SupportRequest testRequest;
     private Client testClient;
     private Project testProject;
+    private UUID testClientId;
+    private UUID testProjectId;
 
     @BeforeEach
     void setUp() {
+        testClientId = UUID.randomUUID();
+        testProjectId = UUID.randomUUID();
+
         testClient = mock(Client.class);
-        when(testClient.getId()).thenReturn(UUID.randomUUID());
+        when(testClient.getId()).thenReturn(testClientId);
         when(testClient.getName()).thenReturn("Test Client");
 
         testProject = mock(Project.class);
-        when(testProject.getId()).thenReturn(UUID.randomUUID());
+        when(testProject.getId()).thenReturn(testProjectId);
         when(testProject.getName()).thenReturn("Test Project");
 
         testRequest = new SupportRequest();
         testRequest.setId(UUID.randomUUID());
         testRequest.setReference("GP-REQ-2026-123");
-        testRequest.setClientId(testClient.getId());
-        testRequest.setProjectId(testProject.getId());
+        testRequest.setClientId(testClientId);
+        testRequest.setProjectId(testProjectId);
         testRequest.setTitle("Test Request");
         testRequest.setCategory(SupportCategory.PAID_AD_HOC_SUPPORT);
         testRequest.setDescription("Test description");
@@ -320,6 +325,84 @@ class SupportRequestServiceTest {
 
         assertThrows(InvalidSupportRequestStatusTransitionException.class,
                 () -> supportRequestService.approveEstimate(testRequest.getId(), command));
+    }
+
+    @Test
+    void approveMyEstimate_UpdatesStatusToReadyToStartWithOwnershipCheck() {
+        testRequest.setStatus(SupportRequestStatus.AWAITING_CLIENT_APPROVAL);
+        ApproveEstimateCommand command = new ApproveEstimateCommand("client@example.com");
+
+        SupportEstimate testEstimate = new SupportEstimate();
+        testEstimate.setId(UUID.randomUUID());
+        testEstimate.setRequestId(testRequest.getId());
+        testEstimate.setEstimatedHours(new BigDecimal("5.0"));
+        testEstimate.setHourlyRate(new BigDecimal("100.00"));
+        testEstimate.setSubtotal(new BigDecimal("500.00"));
+        testEstimate.setDiscount(BigDecimal.ZERO);
+        testEstimate.setTotalAmount(new BigDecimal("500.00"));
+        testEstimate.setCurrency("USD");
+        testEstimate.setDeliveryTimelineDays(7);
+        testEstimate.setExplanation("Test explanation");
+        testEstimate.setStatus(SupportEstimateStatus.PENDING_APPROVAL);
+        testEstimate.setCreatedAt(Instant.now());
+
+        UUID userId = UUID.randomUUID();
+        User testUser = mock(User.class);
+        when(testUser.getId()).thenReturn(userId);
+        when(testUser.getClientId()).thenReturn(testClientId);
+
+        when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
+        when(supportEstimateRepository.findByRequestId(testRequest.getId())).thenReturn(Optional.of(testEstimate));
+        when(authService.getUserById(userId)).thenReturn(testUser);
+        when(clientRepository.findById(testClientId)).thenReturn(Optional.of(testClient));
+        when(projectRepository.findById(testProjectId)).thenReturn(Optional.of(testProject));
+        when(supportRequestRepository.save(any())).thenReturn(testRequest);
+        when(supportEstimateRepository.save(any())).thenReturn(testEstimate);
+
+        supportRequestService.approveMyEstimate(testRequest.getId(), command, userId.toString());
+
+        assertEquals(SupportRequestStatus.READY_TO_START, testRequest.getStatus());
+        assertEquals(SupportEstimateStatus.ACCEPTED, testEstimate.getStatus());
+        assertEquals("client@example.com", testEstimate.getAcceptedBy());
+        assertNotNull(testEstimate.getAcceptedAt());
+        verify(supportRequestRepository).save(testRequest);
+        verify(supportEstimateRepository).save(testEstimate);
+    }
+
+    @Test
+    void approveMyEstimate_ThrowsWhenUserNotAssociatedWithClient() {
+        testRequest.setStatus(SupportRequestStatus.AWAITING_CLIENT_APPROVAL);
+        ApproveEstimateCommand command = new ApproveEstimateCommand("client@example.com");
+
+        UUID userId = UUID.randomUUID();
+        User testUser = mock(User.class);
+        when(testUser.getId()).thenReturn(userId);
+        when(testUser.getClientId()).thenReturn(null); // No client association
+
+        when(authService.getUserById(userId)).thenReturn(testUser);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> supportRequestService.approveMyEstimate(testRequest.getId(), command, userId.toString()));
+    }
+
+    @Test
+    void approveMyEstimate_ThrowsWhenRequestDoesNotBelongToClient() {
+        UUID differentClientId = UUID.randomUUID();
+        testRequest.setStatus(SupportRequestStatus.AWAITING_CLIENT_APPROVAL);
+        testRequest.setClientId(differentClientId); // Different client ID
+
+        ApproveEstimateCommand command = new ApproveEstimateCommand("client@example.com");
+
+        UUID userId = UUID.randomUUID();
+        User testUser = mock(User.class);
+        when(testUser.getId()).thenReturn(userId);
+        when(testUser.getClientId()).thenReturn(testClientId); // User's client ID
+
+        when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
+        when(authService.getUserById(userId)).thenReturn(testUser);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> supportRequestService.approveMyEstimate(testRequest.getId(), command, userId.toString()));
     }
 
     @Test

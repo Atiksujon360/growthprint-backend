@@ -67,14 +67,20 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/me").authenticated()
 
                         // Client-specific endpoints - require CLIENT role with server-side ownership validation
-                        .requestMatchers("/api/v1/support-requests/my").hasRole("CLIENT")
+                        .requestMatchers("/api/v1/support-requests/my/**").hasRole("CLIENT")
                         .requestMatchers("/api/v1/invoices/my").hasRole("CLIENT")
                         .requestMatchers("/api/v1/projects/my").hasRole("CLIENT")
+                        .requestMatchers("/api/v1/proposals/my/**").hasRole("CLIENT")
 
                         // Admin-only endpoints
                         .requestMatchers("/api/v1/clients/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/leads/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/crm-leads/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/invoices/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/support-requests/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/projects/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/outreach/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/proposals/**").hasRole("ADMIN")
 
                         // Development-only seed endpoint - requires ADMIN role and dev profile
                         // Note: Only active when spring.profiles.active includes "dev" or "development"
