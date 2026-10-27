@@ -33,317 +33,624 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ProposalServiceTest {
 
-    @Mock
-    private ProposalRepository proposalRepository;
+        @Mock
+        private ProposalRepository proposalRepository;
 
-    @Mock
-    private ClientRepository clientRepository;
+        @Mock
+        private ClientRepository clientRepository;
 
-    @Mock
-    private UserRepository userRepository;
+        @Mock
+        private UserRepository userRepository;
 
-    @Mock
-    private AuthService authService;
+        @Mock
+        private AuthService authService;
 
-    @Mock
-    private ObjectMapper objectMapper;
+        @Mock
+        private ObjectMapper objectMapper;
 
-    @InjectMocks
-    private ProposalService proposalService;
+        @InjectMocks
+        private ProposalService proposalService;
 
-    private Client testClient;
-    private User testUser;
-    private Proposal testProposal;
+        private Client testClient;
+        private User testUser;
+        private Proposal testProposal;
 
-    @BeforeEach
-    void setUp() {
-        testClient = new Client(
-                UUID.randomUUID(),
-                "Test Client",
-                "Test Client LLC",
-                "test@example.com",
-                "+1-555-0100",
-                "https://example.com",
-                ClientEnums.ClientStatus.ACTIVE,
-                ClientEnums.RetainerTier.PRO_GROWTH,
-                40,
-                25,
-                LocalDate.of(2025, 1, 1),
-                "Test Manager",
-                ClientEnums.BillingCurrency.USD,
-                "Test notes"
-        );
+        @BeforeEach
+                        void setUp() {
+                testClient = new Client(
+                                UUID.randomUUID(),
+                                "Test Client",
+                                "Test Client LLC",
+                                "test@example.com",
+                                "+1-555-0100",
+                                "https://example.com",
+                                ClientEnums.ClientStatus.ACTIVE,
+                                ClientEnums.RetainerTier.PRO_GROWTH,
+                                40,
+                                25,
+                                LocalDate.of(2025, 1, 1),
+                                "Test Manager",
+                                ClientEnums.BillingCurrency.USD,
+                                "Test notes");
 
-        testUser = new User(
-                UUID.randomUUID(),
-                "user@example.com",
-                "user@example.com",
-                "encodedPassword",
-                com.growthprint.backend.auth.entity.UserRole.CLIENT,
-                com.growthprint.backend.auth.entity.AccountStatus.ACTIVE,
-                testClient.getId(),
-                Instant.now(),
-                Instant.now()
-        );
+                testUser = new User(
+                                                UUID.randomUUID(),
+                                "user@example.com",
+                                "user@example.com",
+                                "encodedPassword",
+                                com.growthprint.backend.auth.entity.UserRole.CLIENT,
+                                com.growthprint.backend.auth.entity.AccountStatus.ACTIVE,
+                                testClient.getId(),
+                                Instant.now(),
+                                Instant.now());
 
-        testProposal = new Proposal(
-                UUID.randomUUID(),
-                "GP-PROP-2026-0001",
-                testClient.getId(),
-                testClient.getName(),
-                "Test Proposal",
-                "SOFTWARE_DEV",
-                "Test scope summary",
-                "[\"Deliverable 1\", \"Deliverable 2\"]",
-                "[\"Exclusion 1\"]",
-                new BigDecimal("10000.00"),
-                ProposalCurrency.USD,
-                "[{\"description\":\"Milestone 1\",\"percentage\":50,\"amount\":5000.00}]",
-                "8 Weeks",
-                LocalDate.of(2026, 12, 31),
-                ProposalStatus.DRAFT,
-                "Test notes",
-                Instant.now(),
-                Instant.now()
-        );
-    }
+                testProposal = new Proposal(
+                                                UUID.randomUUID(),
+                                "GP-PROP-2026-0001",
+                                testClient.getId(),
+                                testClient.getName(),
+                                "Test Proposal",
+                                "SOFTWARE_DEV",
+                                "Test scope summary",
+                                "[\"Deliverable 1\", \"Deliverable 2\"]",
+                                "[\"Exclusion 1\"]",
+                                new BigDecimal("10000.00"),
+                                ProposalCurrency.USD,
+                                "[{\"description\":\"Milestone 1\",\"percentage\":50,\"amount\":5000.00}]",
+                                "8 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                ProposalStatus.DRAFT,
+                                "Test notes",
+                                Instant.now(),
+                                Instant.now());
+        }
 
-    @Test
-    void findAll_shouldReturnAllProposals() {
-        when(proposalRepository.findAll()).thenReturn(List.of(testProposal));
+        @Test
+        void findAll_shouldReturnAllProposals() {
+                when(proposalRepository.findAll()).thenReturn(List.of(testProposal));
 
-        List<ProposalResponse> result = proposalService.findAll();
+                List<ProposalResponse> result = proposalService.findAll();
 
-        assertEquals(1, result.size());
-        assertEquals(testProposal.getId().toString(), result.get(0).id());
-        verify(proposalRepository).findAll();
-    }
+                assertEquals(1, result.size());
+                assertEquals(testProposal.getId().toString(), result.get(0).id());
+                verify(proposalRepository).findAll();
+        }
 
-    @Test
-    void findMyProposals_shouldReturnClientProposals() {
-        when(authService.getUserById(testUser.getId())).thenReturn(testUser);
-        when(proposalRepository.findByClientId(testClient.getId())).thenReturn(List.of(testProposal));
+        @Test
+        void findMyProposals_shouldReturnClientProposals() {
+                when(authService.getUserById(testUser.getId())).thenReturn(testUser);
+                when(proposalRepository.findByClientId(testClient.getId())).thenReturn(List.of(testProposal));
 
-        List<ProposalResponse> result = proposalService.findMyProposals(testUser.getId().toString());
+                List<ProposalResponse> result = proposalService.findMyProposals(testUser.getId().toString());
 
-        assertEquals(1, result.size());
-        verify(proposalRepository).findByClientId(testClient.getId());
-    }
+                assertEquals(1, result.size());
+                verify(proposalRepository).findByClientId(testClient.getId());
+        }
 
-    @Test
-    void findById_shouldReturnProposal() {
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+        @Test
+        void findById_shouldReturnProposal() {
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
 
-        ProposalResponse result = proposalService.findById(testProposal.getId());
+                ProposalResponse result = proposalService.findById(testProposal.getId());
 
-        assertNotNull(result);
-        assertEquals(testProposal.getId().toString(), result.id());
-        verify(proposalRepository).findById(testProposal.getId());
-    }
+                assertNotNull(result);
+                assertEquals(testProposal.getId().toString(), result.id());
+                verify(proposalRepository).findById(testProposal.getId());
+        }
 
-    @Test
-    void findById_shouldThrowWhenNotFound() {
-        UUID id = UUID.randomUUID();
-        when(proposalRepository.findById(id)).thenReturn(Optional.empty());
+        @Test
+        void findById_shouldThrowWhenNotFound() {
+                UUID id = UUID.randomUUID();
+                when(proposalRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThrows(IllegalArgumentException.class, () -> proposalService.findById(id));
-        verify(proposalRepository).findById(id);
-    }
+                assertThrows(IllegalArgumentException.class, () -> proposalService.findById(id));
+                verify(proposalRepository).findById(id);
+        }
 
-    @Test
-    void create_shouldCreateNewProposal() {
-        CreateProposalCommand command = new CreateProposalCommand(
-                testClient.getId().toString(),
-                "New Proposal",
-                "SOFTWARE_DEV",
-                "New scope summary",
-                List.of("Deliverable 1"),
-                List.of("Exclusion 1"),
-                new BigDecimal("5000.00"),
-                "USD",
-                List.of(new CreateProposalCommand.PaymentMilestone("Milestone 1", 50, new BigDecimal("2500.00"))),
-                "4 Weeks",
-                LocalDate.of(2026, 12, 31),
-                "Notes"
-        );
+        @Test
+                        void create_shouldCreateNewProposal() {
+                CreateProposalCommand command = new CreateProposalCommand(
+                                testClient.getId().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("5000.00"),
+                                "USD",
+                                List.of(
+                                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("2500.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("2500.00"))),
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
 
-        when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
-        when(proposalRepository.existsByProposalNumber(anyString())).thenReturn(false);
-        when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
+                when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+                when(proposalRepository.existsByProposalNumber(anyString())).thenReturn(false);
+                when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
 
-        ProposalResponse result = proposalService.create(command);
+                ProposalResponse result = proposalService.create(command);
 
-        assertNotNull(result);
-        verify(clientRepository).findById(testClient.getId());
-        verify(proposalRepository).save(any(Proposal.class));
-    }
+                assertNotNull(result);
+                verify(clientRepository).findById(testClient.getId());
+                verify(proposalRepository).save(any(Proposal.class));
+        }
 
-    @Test
-    void create_shouldThrowWhenClientNotFound() {
-        CreateProposalCommand command = new CreateProposalCommand(
-                UUID.randomUUID().toString(),
-                "New Proposal",
-                "SOFTWARE_DEV",
-                "New scope summary",
-                List.of("Deliverable 1"),
-                List.of("Exclusion 1"),
-                new BigDecimal("5000.00"),
-                "USD",
-                List.of(new CreateProposalCommand.PaymentMilestone("Milestone 1", 50, new BigDecimal("2500.00"))),
-                "4 Weeks",
-                LocalDate.of(2026, 12, 31),
-                "Notes"
-        );
+        @Test
+                        void create_shouldThrowWhenClientNotFound() {
+                CreateProposalCommand command = new CreateProposalCommand(
+                                UUID.randomUUID().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("5000.00"),
+                                "USD",
+                                List.of(
+                                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("2500.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("2500.00"))),
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
 
-        when(clientRepository.findById(any())).thenReturn(Optional.empty());
+                when(clientRepository.findById(any())).thenReturn(Optional.empty());
 
-        assertThrows(IllegalArgumentException.class, () -> proposalService.create(command));
-    }
+                assertThrows(IllegalArgumentException.class, () -> proposalService.create(command));
+        }
 
-    @Test
-    void update_shouldUpdateDraftProposal() {
-        UpdateProposalCommand command = new UpdateProposalCommand(
-                "Updated Title",
-                "SOFTWARE_DEV",
-                "Updated scope",
-                List.of("Updated Deliverable"),
-                List.of("Updated Exclusion"),
-                new BigDecimal("15000.00"),
-                "USD",
-                List.of(new CreateProposalCommand.PaymentMilestone("Milestone 1", 50, new BigDecimal("7500.00"))),
-                "6 Weeks",
-                LocalDate.of(2026, 12, 31),
-                "Updated notes"
-        );
+        @Test
+                        void update_shouldUpdateDraftProposal() {
+                UpdateProposalCommand command = new UpdateProposalCommand(
+                                "Updated Title",
+                                "SOFTWARE_DEV",
+                                "Updated scope",
+                                List.of("Updated Deliverable"),
+                                List.of("Updated Exclusion"),
+                                new BigDecimal("15000.00"),
+                                "USD",
+                                List.of(
+                                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("7500.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("7500.00"))),
+                                "6 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Updated notes");
 
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
-        when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
 
-        ProposalResponse result = proposalService.update(testProposal.getId(), command);
+                ProposalResponse result = proposalService.update(testProposal.getId(), command);
 
-        assertNotNull(result);
-        verify(proposalRepository).save(any(Proposal.class));
-    }
+                assertNotNull(result);
+                verify(proposalRepository).save(any(Proposal.class));
+        }
 
-    @Test
-    void update_shouldThrowWhenNotDraft() {
-        testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
-        UpdateProposalCommand command = new UpdateProposalCommand(
-                "Updated Title",
-                "SOFTWARE_DEV",
-                "Updated scope",
-                List.of("Updated Deliverable"),
-                List.of("Updated Exclusion"),
-                new BigDecimal("15000.00"),
-                "USD",
-                List.of(new CreateProposalCommand.PaymentMilestone("Milestone 1", 50, new BigDecimal("7500.00"))),
-                "6 Weeks",
-                LocalDate.of(2026, 12, 31),
-                "Updated notes"
-        );
+        @Test
+                        void update_shouldThrowWhenNotDraft() {
+                testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
+                UpdateProposalCommand command = new UpdateProposalCommand(
+                                "Updated Title",
+                                "SOFTWARE_DEV",
+                                "Updated scope",
+                                List.of("Updated Deliverable"),
+                                List.of("Updated Exclusion"),
+                                new BigDecimal("15000.00"),
+                                "USD",
+                                List.of(
+                                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("7500.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("7500.00"))),
+                                "6 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Updated notes");
 
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
 
-        assertThrows(IllegalStateException.class, () -> proposalService.update(testProposal.getId(), command));
-    }
+                assertThrows(IllegalStateException.class, () -> proposalService.update(testProposal.getId(), command));
+        }
 
-    @Test
-    void publish_shouldPublishDraftProposal() {
-        PublishProposalCommand command = new PublishProposalCommand(LocalDate.of(2026, 12, 31));
+        @Test
+        void publish_shouldPublishDraftProposal() {
+                PublishProposalCommand command = new PublishProposalCommand(LocalDate.of(2026, 12, 31));
 
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
-        when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
 
-        ProposalResponse result = proposalService.publish(testProposal.getId(), command);
+                ProposalResponse result = proposalService.publish(testProposal.getId(), command);
 
-        assertNotNull(result);
-        verify(proposalRepository).save(any(Proposal.class));
-    }
+                assertNotNull(result);
+                verify(proposalRepository).save(any(Proposal.class));
+        }
 
-    @Test
-    void publish_shouldThrowWhenNotDraft() {
-        testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
-        PublishProposalCommand command = new PublishProposalCommand(LocalDate.of(2026, 12, 31));
+        @Test
+        void publish_shouldThrowWhenNotDraft() {
+                testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
+                PublishProposalCommand command = new PublishProposalCommand(LocalDate.of(2026, 12, 31));
 
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
 
-        assertThrows(IllegalStateException.class, () -> proposalService.publish(testProposal.getId(), command));
-    }
+                assertThrows(IllegalStateException.class, () -> proposalService.publish(testProposal.getId(), command));
+        }
 
-    @Test
-    void recordDecision_shouldAcceptProposal() {
-        testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
-        ProposalDecisionCommand command = new ProposalDecisionCommand("ACCEPT", "Accepted by client");
+        @Test
+        void recordDecision_shouldAcceptProposal() {
+                testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
+                ProposalDecisionCommand command = new ProposalDecisionCommand("ACCEPT", "Accepted by client");
 
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
-        when(authService.getUserById(testUser.getId())).thenReturn(testUser);
-        when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(authService.getUserById(testUser.getId())).thenReturn(testUser);
+                when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
 
-        ProposalResponse result = proposalService.recordDecision(testProposal.getId(), command, testUser.getId().toString());
+                ProposalResponse result = proposalService.recordDecision(testProposal.getId(), command,
+                                testUser.getId().toString());
 
-        assertNotNull(result);
-        verify(proposalRepository).save(any(Proposal.class));
-    }
+                assertNotNull(result);
+                verify(proposalRepository).save(any(Proposal.class));
+        }
 
-    @Test
-    void recordDecision_shouldDeclineProposal() {
-        testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
-        ProposalDecisionCommand command = new ProposalDecisionCommand("DECLINE", "Declined by client");
+        @Test
+        void recordDecision_shouldDeclineProposal() {
+                testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
+                ProposalDecisionCommand command = new ProposalDecisionCommand("DECLINE", "Declined by client");
 
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
-        when(authService.getUserById(testUser.getId())).thenReturn(testUser);
-        when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(authService.getUserById(testUser.getId())).thenReturn(testUser);
+                when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
 
-        ProposalResponse result = proposalService.recordDecision(testProposal.getId(), command, testUser.getId().toString());
+                ProposalResponse result = proposalService.recordDecision(testProposal.getId(), command,
+                                testUser.getId().toString());
 
-        assertNotNull(result);
-        verify(proposalRepository).save(any(Proposal.class));
-    }
+                assertNotNull(result);
+                verify(proposalRepository).save(any(Proposal.class));
+        }
 
-    @Test
-    void recordDecision_shouldThrowWhenNotAuthorized() {
-        testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
-        ProposalDecisionCommand command = new ProposalDecisionCommand("ACCEPT", "Accepted");
+        @Test
+        void recordDecision_shouldThrowWhenNotAuthorized() {
+                testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
+                ProposalDecisionCommand command = new ProposalDecisionCommand("ACCEPT", "Accepted");
 
-        User otherUser = new User(
-                UUID.randomUUID(),
-                "other@example.com",
-                "other@example.com",
-                "encodedPassword",
-                com.growthprint.backend.auth.entity.UserRole.CLIENT,
-                com.growthprint.backend.auth.entity.AccountStatus.ACTIVE,
-                UUID.randomUUID(), // Different client ID
-                Instant.now(),
-                Instant.now()
-        );
+                User otherUser = new User(
+                                                UUID.randomUUID(),
+                                "other@example.com",
+                                "other@example.com",
+                                "encodedPassword",
+                                com.growthprint.backend.auth.entity.UserRole.CLIENT,
+                                com.growthprint.backend.auth.entity.AccountStatus.ACTIVE,
+                                UUID.randomUUID(), // Different client ID
+                                Instant.now(),
+                                Instant.now());
 
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
-        when(authService.getUserById(otherUser.getId())).thenReturn(otherUser);
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(authService.getUserById(otherUser.getId())).thenReturn(otherUser);
 
-        assertThrows(IllegalStateException.class, () -> proposalService.recordDecision(testProposal.getId(), command, otherUser.getId().toString()));
-    }
+                assertThrows(IllegalStateException.class, () -> proposalService.recordDecision(testProposal.getId(),
+                                command, otherUser.getId().toString()));
+        }
 
-    @Test
-    void recordDecision_shouldThrowWhenNotAwaitingDecision() {
-        testProposal.setStatus(ProposalStatus.DRAFT);
-        ProposalDecisionCommand command = new ProposalDecisionCommand("ACCEPT", "Accepted");
+        @Test
+        void recordDecision_shouldThrowWhenNotAwaitingDecision() {
+                testProposal.setStatus(ProposalStatus.DRAFT);
+                ProposalDecisionCommand command = new ProposalDecisionCommand("ACCEPT", "Accepted");
 
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
-        when(authService.getUserById(testUser.getId())).thenReturn(testUser);
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(authService.getUserById(testUser.getId())).thenReturn(testUser);
 
-        assertThrows(IllegalStateException.class, () -> proposalService.recordDecision(testProposal.getId(), command, testUser.getId().toString()));
-    }
+                assertThrows(IllegalStateException.class, () -> proposalService.recordDecision(testProposal.getId(),
+                                command, testUser.getId().toString()));
+        }
 
-    @Test
-    void recordDecision_shouldThrowWhenExpired() {
-        testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
-        testProposal.setValidUntil(LocalDate.now().minusDays(1)); // Expired
-        ProposalDecisionCommand command = new ProposalDecisionCommand("ACCEPT", "Accepted");
+        @Test
+        void recordDecision_shouldThrowWhenExpired() {
+                testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
+                testProposal.setValidUntil(LocalDate.now().minusDays(1)); // Expired
+                ProposalDecisionCommand command = new ProposalDecisionCommand("ACCEPT", "Accepted");
 
-        when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
-        when(authService.getUserById(testUser.getId())).thenReturn(testUser);
-        when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(authService.getUserById(testUser.getId())).thenReturn(testUser);
+                when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
 
-        assertThrows(IllegalStateException.class, () -> proposalService.recordDecision(testProposal.getId(), command, testUser.getId().toString()));
-    }
+                assertThrows(IllegalStateException.class, () -> proposalService.recordDecision(testProposal.getId(),
+                                command, testUser.getId().toString()));
+        }
+
+        @Test
+        void create_shouldAcceptValidMilestones() {
+                CreateProposalCommand command = new CreateProposalCommand(
+                                testClient.getId().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("10000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("5000.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("5000.00"))),
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
+
+                when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+                when(proposalRepository.existsByProposalNumber(anyString())).thenReturn(false);
+                when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
+
+                ProposalResponse result = proposalService.create(command);
+
+                assertNotNull(result);
+                verify(proposalRepository).save(any(Proposal.class));
+        }
+
+        @Test
+        void create_shouldRejectMilestonesPercentagesNotSummingTo100() {
+                CreateProposalCommand command = new CreateProposalCommand(
+                                testClient.getId().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("10000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 60,
+                                                                new BigDecimal("6000.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 60,
+                                                                new BigDecimal("6000.00")) // 120% total
+                                ),
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
+
+                when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+
+                assertThrows(IllegalArgumentException.class, () -> proposalService.create(command));
+        }
+
+        @Test
+        void create_shouldRejectMilestonesPercentagesLessThan100() {
+                CreateProposalCommand command = new CreateProposalCommand(
+                                testClient.getId().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("10000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 40,
+                                                                new BigDecimal("4000.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 40,
+                                                                new BigDecimal("4000.00")) // 80% total
+                                ),
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
+
+                when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+
+                assertThrows(IllegalArgumentException.class, () -> proposalService.create(command));
+        }
+
+        @Test
+        void create_shouldRejectMilestonesAmountsNotMatchingTotalPrice() {
+                CreateProposalCommand command = new CreateProposalCommand(
+                                testClient.getId().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("10000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("4000.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("7000.00")) // 11000 != 10000
+                                ),
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
+
+                when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+
+                assertThrows(IllegalArgumentException.class, () -> proposalService.create(command));
+        }
+
+        @Test
+        void create_shouldRejectNegativeMilestoneAmount() {
+                CreateProposalCommand command = new CreateProposalCommand(
+                                testClient.getId().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("10000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("-100.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("5100.00"))),
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
+
+                when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+
+                assertThrows(IllegalArgumentException.class, () -> proposalService.create(command));
+        }
+
+        @Test
+        void create_shouldRejectZeroMilestoneAmount() {
+                CreateProposalCommand command = new CreateProposalCommand(
+                                testClient.getId().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("10000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("0.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("10000.00"))),
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
+
+                when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+
+                assertThrows(IllegalArgumentException.class, () -> proposalService.create(command));
+        }
+
+        @Test
+        void create_shouldRejectEmptyMilestones() {
+                CreateProposalCommand command = new CreateProposalCommand(
+                                testClient.getId().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("10000.00"),
+                                "USD",
+                                List.of(), // Empty milestones
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
+
+                when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+
+                assertThrows(IllegalArgumentException.class, () -> proposalService.create(command));
+        }
+
+        @Test
+        void update_shouldValidateMilestones() {
+                UpdateProposalCommand command = new UpdateProposalCommand(
+                                "Updated Title",
+                                "SOFTWARE_DEV",
+                                "Updated scope",
+                                List.of("Updated Deliverable"),
+                                List.of("Updated Exclusion"),
+                                new BigDecimal("15000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("7500.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("7500.00"))),
+                                "6 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Updated notes");
+
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+                when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
+
+                ProposalResponse result = proposalService.update(testProposal.getId(), command);
+
+                assertNotNull(result);
+                verify(proposalRepository).save(any(Proposal.class));
+        }
+
+        @Test
+        void update_shouldRejectInvalidMilestonePercentages() {
+                UpdateProposalCommand command = new UpdateProposalCommand(
+                                "Updated Title",
+                                "SOFTWARE_DEV",
+                                "Updated scope",
+                                List.of("Updated Deliverable"),
+                                List.of("Updated Exclusion"),
+                                new BigDecimal("15000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 30,
+                                                                new BigDecimal("4500.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 30,
+                                                                new BigDecimal("4500.00")) // 60% total
+                                ),
+                                "6 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Updated notes");
+
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+
+                assertThrows(IllegalArgumentException.class,
+                                () -> proposalService.update(testProposal.getId(), command));
+        }
+
+        @Test
+        void update_shouldRejectInvalidMilestoneAmounts() {
+                UpdateProposalCommand command = new UpdateProposalCommand(
+                                "Updated Title",
+                                "SOFTWARE_DEV",
+                                "Updated scope",
+                                List.of("Updated Deliverable"),
+                                List.of("Updated Exclusion"),
+                                new BigDecimal("15000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 50,
+                                                                new BigDecimal("8000.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 50,
+                                                                new BigDecimal("8000.00")) // 16000 != 15000
+                                ),
+                                "6 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Updated notes");
+
+                when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
+
+                assertThrows(IllegalArgumentException.class,
+                                () -> proposalService.update(testProposal.getId(), command));
+        }
+
+        @Test
+        void create_shouldHandleRoundingEdgeCase() {
+                // Test with amounts that require rounding: 10000 / 3 = 3333.33 each
+                // Using 33.33% each would round to 3333.33, total = 9999.99
+                // So we use integer percentages that sum to 100
+                CreateProposalCommand command = new CreateProposalCommand(
+                                testClient.getId().toString(),
+                                "New Proposal",
+                                "SOFTWARE_DEV",
+                                "New scope summary",
+                                List.of("Deliverable 1"),
+                                List.of("Exclusion 1"),
+                                new BigDecimal("10000.00"),
+                                "USD",
+                                List.of(
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 1", 33,
+                                                                new BigDecimal("3300.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 2", 33,
+                                                                new BigDecimal("3300.00")),
+                                                new CreateProposalCommand.PaymentMilestone("Milestone 3", 34,
+                                                                new BigDecimal("3400.00"))),
+                                "4 Weeks",
+                                LocalDate.of(2026, 12, 31),
+                                "Notes");
+
+                when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+                when(proposalRepository.existsByProposalNumber(anyString())).thenReturn(false);
+                when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
+
+                ProposalResponse result = proposalService.create(command);
+
+                assertNotNull(result);
+                verify(proposalRepository).save(any(Proposal.class));
+        }
 }

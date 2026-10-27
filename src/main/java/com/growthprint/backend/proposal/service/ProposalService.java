@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -82,6 +83,9 @@ public class ProposalService {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Client not found: " + command.clientId()));
 
+        // Validate payment milestones
+        validatePaymentMilestones(command.paymentMilestones(), command.totalPrice());
+
         String proposalNumber = generateProposalNumber();
         while (proposalRepository.existsByProposalNumber(proposalNumber)) {
             proposalNumber = generateProposalNumber();
@@ -120,6 +124,9 @@ public class ProposalService {
         if (proposal.getStatus() != ProposalStatus.DRAFT) {
             throw new IllegalStateException("Only draft proposals can be updated");
         }
+
+        // Validate payment milestones
+        validatePaymentMilestones(command.paymentMilestones(), command.totalPrice());
 
         proposal.setTitle(command.title());
         proposal.setServiceCategory(command.serviceCategory());
@@ -196,6 +203,40 @@ public class ProposalService {
 
         Proposal saved = proposalRepository.save(proposal);
         return toResponse(saved);
+    }
+
+    private void validatePaymentMilestones(List<CreateProposalCommand.PaymentMilestone> milestones, BigDecimal totalPrice) {
+        if (milestones == null || milestones.isEmpty()) {
+            throw new IllegalArgumentException("Payment milestones are required");
+        }
+
+        // Validate percentages sum to 100
+        int totalPercentage = milestones.stream()
+                .mapToInt(CreateProposalCommand.PaymentMilestone::percentage)
+                .sum();
+
+        if (totalPercentage != 100) {
+            throw new IllegalArgumentException(
+                    String.format("Payment milestone percentages must sum to 100, got %d", totalPercentage));
+        }
+
+        // Validate amounts sum to total_price
+        BigDecimal totalAmount = milestones.stream()
+                .map(CreateProposalCommand.PaymentMilestone::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (totalAmount.compareTo(totalPrice) != 0) {
+            throw new IllegalArgumentException(
+                    String.format("Payment milestone amounts must sum to total price %s, got %s",
+                            totalPrice, totalAmount));
+        }
+
+        // Validate all amounts are positive
+        for (CreateProposalCommand.PaymentMilestone milestone : milestones) {
+            if (milestone.amount().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Payment milestone amounts must be positive");
+            }
+        }
     }
 
     private String toJson(Object obj) {
