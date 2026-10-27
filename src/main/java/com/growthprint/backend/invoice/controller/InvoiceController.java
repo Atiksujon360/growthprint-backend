@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,6 +32,13 @@ public class InvoiceController {
     @PreAuthorize("hasRole('ADMIN')")
     public List<InvoiceResponse> list() {
         return invoiceService.findAll();
+    }
+
+    @GetMapping("/my")
+    @Operation(summary = "List invoices for authenticated client")
+    @PreAuthorize("hasRole('CLIENT')")
+    public List<InvoiceResponse> listMyInvoices(@AuthenticationPrincipal String userId) {
+        return invoiceService.findMyInvoices(userId);
     }
 
     @GetMapping("/{id}")

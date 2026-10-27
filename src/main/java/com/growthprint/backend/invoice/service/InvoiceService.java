@@ -1,5 +1,7 @@
 package com.growthprint.backend.invoice.service;
 
+import com.growthprint.backend.auth.entity.User;
+import com.growthprint.backend.auth.service.AuthService;
 import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.repository.ClientRepository;
 import com.growthprint.backend.invoice.dto.CreateInvoiceCommand;
@@ -30,12 +32,14 @@ public class InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final InvoiceLineItemRepository lineItemRepository;
     private final ClientRepository clientRepository;
+    private final AuthService authService;
 
     public InvoiceService(InvoiceRepository invoiceRepository, InvoiceLineItemRepository lineItemRepository,
-                          ClientRepository clientRepository) {
+                          ClientRepository clientRepository, AuthService authService) {
         this.invoiceRepository = invoiceRepository;
         this.lineItemRepository = lineItemRepository;
         this.clientRepository = clientRepository;
+        this.authService = authService;
     }
 
     @Transactional(readOnly = true)
@@ -52,6 +56,40 @@ public class InvoiceService {
         if (!clientIds.isEmpty()) {
             clientRepository.findAllById(clientIds).forEach(client ->
                     clientMap.put(client.getId(), client));
+        }
+
+        return invoices.stream()
+                .map(invoice -> toResponseWithLineItems(invoice, clientMap))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<InvoiceResponse> findByClientId(UUID clientId) {
+        List<Invoice> invoices = invoiceRepository.findByClientId(clientId);
+
+        Client client = clientRepository.findById(clientId).orElse(null);
+        Map<UUID, Client> clientMap = new HashMap<>();
+        if (client != null) {
+            clientMap.put(clientId, client);
+        }
+
+        return invoices.stream()
+                .map(invoice -> toResponseWithLineItems(invoice, clientMap))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<InvoiceResponse> findMyInvoices(String userId) {
+        User user = authService.getUserById(UUID.fromString(userId));
+        if (user.getClientId() == null) {
+            throw new IllegalArgumentException("User is not associated with a client");
+        }
+        List<Invoice> invoices = invoiceRepository.findByClientId(user.getClientId());
+
+        Client client = clientRepository.findById(user.getClientId()).orElse(null);
+        Map<UUID, Client> clientMap = new HashMap<>();
+        if (client != null) {
+            clientMap.put(user.getClientId(), client);
         }
 
         return invoices.stream()

@@ -1,5 +1,7 @@
 package com.growthprint.backend.support.service;
 
+import com.growthprint.backend.auth.entity.User;
+import com.growthprint.backend.auth.service.AuthService;
 import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.repository.ClientRepository;
 import com.growthprint.backend.project.entity.Project;
@@ -45,6 +47,9 @@ class SupportRequestServiceTest {
     @Mock
     private ProjectRepository projectRepository;
 
+    @Mock
+    private AuthService authService;
+
     @InjectMocks
     private SupportRequestService supportRequestService;
 
@@ -75,6 +80,59 @@ class SupportRequestServiceTest {
         testRequest.setStatus(SupportRequestStatus.NEW);
         testRequest.setCreatedAt(Instant.now());
         testRequest.setUpdatedAt(Instant.now());
+    }
+
+    @Test
+    void findMyRequests_ReturnsRequestsForClient() {
+        UUID userId = UUID.randomUUID();
+        UUID clientId = UUID.randomUUID();
+        User testUser = mock(User.class);
+        when(testUser.getClientId()).thenReturn(clientId);
+
+        Client mockClient = mock(Client.class);
+        when(mockClient.getId()).thenReturn(clientId);
+        when(mockClient.getName()).thenReturn("Test Client");
+
+        when(authService.getUserById(userId)).thenReturn(testUser);
+        when(supportRequestRepository.findByClientId(clientId)).thenReturn(List.of(testRequest));
+        when(clientRepository.findById(clientId)).thenReturn(Optional.of(mockClient));
+        when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
+
+        var result = supportRequestService.findMyRequests(userId.toString());
+
+        assertEquals(1, result.size());
+        verify(authService).getUserById(userId);
+        verify(supportRequestRepository).findByClientId(clientId);
+    }
+
+    @Test
+    void findMyRequests_ThrowsWhenUserNotAssociatedWithClient() {
+        UUID userId = UUID.randomUUID();
+        User testUser = mock(User.class);
+        when(testUser.getClientId()).thenReturn(null);
+
+        when(authService.getUserById(userId)).thenReturn(testUser);
+
+        assertThrows(IllegalArgumentException.class, () -> supportRequestService.findMyRequests(userId.toString()));
+        verify(authService).getUserById(userId);
+        verify(supportRequestRepository, never()).findByClientId(any());
+    }
+
+    @Test
+    void findMyRequests_ReturnsEmptyListWhenNoRequests() {
+        UUID userId = UUID.randomUUID();
+        UUID clientId = UUID.randomUUID();
+        User testUser = mock(User.class);
+        when(testUser.getClientId()).thenReturn(clientId);
+
+        when(authService.getUserById(userId)).thenReturn(testUser);
+        when(supportRequestRepository.findByClientId(clientId)).thenReturn(List.of());
+
+        var result = supportRequestService.findMyRequests(userId.toString());
+
+        assertEquals(0, result.size());
+        verify(authService).getUserById(userId);
+        verify(supportRequestRepository).findByClientId(clientId);
     }
 
     @Test

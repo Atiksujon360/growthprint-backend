@@ -3,9 +3,6 @@ spring:
   application:
     name: growthprint-backend
 
-  config:
-    import: optional:file:./.env[.properties]
-
   datasource:
     url: "${DATABASE_URL:}"
     username: "${DATABASE_USERNAME:}"

@@ -1,5 +1,6 @@
 package com.growthprint.backend.project.service;
 
+import com.growthprint.backend.auth.service.AuthService;
 import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.repository.ClientRepository;
 import com.growthprint.backend.project.dto.CreateMilestoneCommand;
@@ -24,25 +25,21 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 @Service
 public class ProjectService {
 
     private final ProjectRepository projectRepository;
     private final MilestoneRepository milestoneRepository;
     private final ClientRepository clientRepository;
-    private final com.growthprint.backend.auth.repository.UserRepository userRepository;
+    private final AuthService authService;
     private final ObjectMapper objectMapper;
 
     public ProjectService(ProjectRepository projectRepository, MilestoneRepository milestoneRepository,
-                          ClientRepository clientRepository, com.growthprint.backend.auth.repository.UserRepository userRepository) {
+                          ClientRepository clientRepository, AuthService authService) {
         this.projectRepository = projectRepository;
         this.milestoneRepository = milestoneRepository;
         this.clientRepository = clientRepository;
-        this.userRepository = userRepository;
+        this.authService = authService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -85,8 +82,7 @@ public class ProjectService {
     @Transactional(readOnly = true)
     public List<ProjectResponse> findByClientId(UUID userId) {
         // Get user's client ID
-        com.growthprint.backend.auth.entity.User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ProjectNotFoundException("User not found"));
+        com.growthprint.backend.auth.entity.User user = authService.getUserById(userId);
 
         if (user.getClientId() == null) {
             return List.of();

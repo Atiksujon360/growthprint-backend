@@ -53,7 +53,7 @@ public class AuthController {
     })
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         User user = authService.authenticate(request.email(), request.password());
-        String token = jwtTokenProvider.generateToken(user);
+        String accessToken = jwtTokenProvider.generateToken(user);
 
         Instant expiresAt = Instant.now().plus(jwtProperties.getExpiration());
 
@@ -64,7 +64,7 @@ public class AuthController {
         );
 
         LoginResponse response = new LoginResponse(
-                token,
+                accessToken,
                 "Bearer",
                 expiresAt,
                 userProfile

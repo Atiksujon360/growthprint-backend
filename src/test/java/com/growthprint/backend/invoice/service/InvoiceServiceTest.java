@@ -1,5 +1,7 @@
 package com.growthprint.backend.invoice.service;
 
+import com.growthprint.backend.auth.entity.User;
+import com.growthprint.backend.auth.service.AuthService;
 import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.entity.ClientEnums;
 import com.growthprint.backend.client.repository.ClientRepository;
@@ -47,6 +49,9 @@ class InvoiceServiceTest {
 
     @Mock
     private ClientRepository clientRepository;
+
+    @Mock
+    private AuthService authService;
 
     @InjectMocks
     private InvoiceService invoiceService;
@@ -541,5 +546,124 @@ class InvoiceServiceTest {
         when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
 
         assertThrows(IllegalArgumentException.class, () -> invoiceService.create(command));
+    }
+
+    @Test
+    void findMyInvoices_ReturnsInvoicesForClient() {
+        UUID userId = UUID.randomUUID();
+        User testUser = mock(User.class);
+        when(testUser.getClientId()).thenReturn(testClient.getId());
+
+        when(authService.getUserById(userId)).thenReturn(testUser);
+        when(invoiceRepository.findByClientId(testClient.getId())).thenReturn(List.of(testInvoice));
+        when(lineItemRepository.findByInvoiceId(testInvoice.getId())).thenReturn(List.of(testLineItem));
+        when(clientRepository.findById(testInvoice.getClientId())).thenReturn(Optional.of(testClient));
+
+        var result = invoiceService.findMyInvoices(userId.toString());
+
+        assertEquals(1, result.size());
+        verify(authService).getUserById(userId);
+        verify(invoiceRepository).findByClientId(testClient.getId());
+    }
+
+    @Test
+    void findMyInvoices_ThrowsWhenUserNotAssociatedWithClient() {
+        UUID userId = UUID.randomUUID();
+        User testUser = mock(User.class);
+        when(testUser.getClientId()).thenReturn(null);
+
+        when(authService.getUserById(userId)).thenReturn(testUser);
+
+        assertThrows(IllegalArgumentException.class, () -> invoiceService.findMyInvoices(userId.toString()));
+        verify(authService).getUserById(userId);
+        verify(invoiceRepository, never()).findByClientId(any());
+    }
+
+    @Test
+    void findMyInvoices_ReturnsEmptyListWhenNoInvoices() {
+        UUID userId = UUID.randomUUID();
+        User testUser = mock(User.class);
+        when(testUser.getClientId()).thenReturn(testClient.getId());
+
+        when(authService.getUserById(userId)).thenReturn(testUser);
+        when(invoiceRepository.findByClientId(testClient.getId())).thenReturn(List.of());
+
+        var result = invoiceService.findMyInvoices(userId.toString());
+
+        assertEquals(0, result.size());
+        verify(authService).getUserById(userId);
+        verify(invoiceRepository).findByClientId(testClient.getId());
+    }
+
+    @Test
+    void findMyInvoices_EnforcesTenantIsolation() {
+        // Setup: Two different clients with different invoices
+        UUID clientAId = UUID.randomUUID();
+        UUID clientBId = UUID.randomUUID();
+        UUID userAId = UUID.randomUUID();
+        UUID userBId = UUID.randomUUID();
+
+        Client clientA = mock(Client.class);
+        when(clientA.getId()).thenReturn(clientAId);
+        when(clientA.getName()).thenReturn("Client A");
+
+        Client clientB = mock(Client.class);
+        when(clientB.getId()).thenReturn(clientBId);
+        when(clientB.getName()).thenReturn("Client B");
+
+        User userA = mock(User.class);
+        when(userA.getId()).thenReturn(userAId);
+        when(userA.getClientId()).thenReturn(clientAId);
+
+        User userB = mock(User.class);
+        when(userB.getId()).thenReturn(userBId);
+        when(userB.getClientId()).thenReturn(clientBId);
+
+        Invoice invoiceForClientA = mock(Invoice.class);
+        when(invoiceForClientA.getId()).thenReturn(UUID.randomUUID());
+        when(invoiceForClientA.getClientId()).thenReturn(clientAId);
+        when(invoiceForClientA.getIssueDate()).thenReturn(LocalDate.now());
+        when(invoiceForClientA.getDueDate()).thenReturn(LocalDate.now().plusDays(15));
+        when(invoiceForClientA.getCurrency()).thenReturn(InvoiceCurrency.USD);
+        when(invoiceForClientA.getStatus()).thenReturn(InvoiceStatus.ISSUED);
+        when(invoiceForClientA.getSubtotal()).thenReturn(new BigDecimal("1000.00"));
+        when(invoiceForClientA.getTaxPercent()).thenReturn(new BigDecimal("0.00"));
+        when(invoiceForClientA.getTaxAmount()).thenReturn(new BigDecimal("0.00"));
+        when(invoiceForClientA.getTotalAmount()).thenReturn(new BigDecimal("1000.00"));
+        when(invoiceForClientA.getUpdatedAt()).thenReturn(Instant.now());
+
+        Invoice invoiceForClientB = mock(Invoice.class);
+        when(invoiceForClientB.getId()).thenReturn(UUID.randomUUID());
+        when(invoiceForClientB.getClientId()).thenReturn(clientBId);
+        when(invoiceForClientB.getIssueDate()).thenReturn(LocalDate.now());
+        when(invoiceForClientB.getDueDate()).thenReturn(LocalDate.now().plusDays(15));
+        when(invoiceForClientB.getCurrency()).thenReturn(InvoiceCurrency.USD);
+        when(invoiceForClientB.getStatus()).thenReturn(InvoiceStatus.ISSUED);
+        when(invoiceForClientB.getSubtotal()).thenReturn(new BigDecimal("1000.00"));
+        when(invoiceForClientB.getTaxPercent()).thenReturn(new BigDecimal("0.00"));
+        when(invoiceForClientB.getTaxAmount()).thenReturn(new BigDecimal("0.00"));
+        when(invoiceForClientB.getTotalAmount()).thenReturn(new BigDecimal("1000.00"));
+        when(invoiceForClientB.getUpdatedAt()).thenReturn(Instant.now());
+
+        // Mock authService to return correct users
+        when(authService.getUserById(userAId)).thenReturn(userA);
+        when(authService.getUserById(userBId)).thenReturn(userB);
+
+        // Mock repository to return invoices based on client ID
+        when(invoiceRepository.findByClientId(clientAId)).thenReturn(List.of(invoiceForClientA));
+        when(invoiceRepository.findByClientId(clientBId)).thenReturn(List.of(invoiceForClientB));
+        when(clientRepository.findById(clientAId)).thenReturn(Optional.of(clientA));
+        when(clientRepository.findById(clientBId)).thenReturn(Optional.of(clientB));
+
+        // Test: User A should only see Client A's invoices
+        var invoicesForUserA = invoiceService.findMyInvoices(userAId.toString());
+        assertEquals(1, invoicesForUserA.size());
+        verify(invoiceRepository).findByClientId(clientAId);
+        verify(invoiceRepository, never()).findByClientId(clientBId);
+
+        // Test: User B should only see Client B's invoices
+        var invoicesForUserB = invoiceService.findMyInvoices(userBId.toString());
+        assertEquals(1, invoicesForUserB.size());
+        verify(invoiceRepository).findByClientId(clientBId);
     }
 }

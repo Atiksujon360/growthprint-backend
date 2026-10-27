@@ -10,7 +10,6 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -49,7 +48,7 @@ public class SecurityConfig {
         ((UrlBasedCorsConfigurationSource) corsConfigurationSource).registerCorsConfiguration("/**", corsConfiguration);
 
         http
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
@@ -67,12 +66,13 @@ public class SecurityConfig {
                         // Authenticated endpoints
                         .requestMatchers("/api/v1/auth/me").authenticated()
 
-                        // Clients endpoints - require ADMIN role until client portal authorization is
-                        // implemented
-                        // Note: Client-specific data isolation will be implemented in a future phase
-                        .requestMatchers("/api/v1/clients/**").hasRole("ADMIN")
+                        // Client-specific endpoints - require CLIENT role with server-side ownership validation
+                        .requestMatchers("/api/v1/support-requests/my").hasRole("CLIENT")
+                        .requestMatchers("/api/v1/invoices/my").hasRole("CLIENT")
+                        .requestMatchers("/api/v1/projects/my").hasRole("CLIENT")
 
-                        // Admin endpoints - require ADMIN role when enabled
+                        // Admin-only endpoints
+                        .requestMatchers("/api/v1/clients/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/leads/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/crm-leads/**").hasRole("ADMIN")
 

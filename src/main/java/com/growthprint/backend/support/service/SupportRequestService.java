@@ -1,5 +1,7 @@
 package com.growthprint.backend.support.service;
 
+import com.growthprint.backend.auth.entity.User;
+import com.growthprint.backend.auth.service.AuthService;
 import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.repository.ClientRepository;
 import com.growthprint.backend.project.entity.Project;
@@ -27,21 +29,44 @@ public class SupportRequestService {
     private final SupportEstimateRepository supportEstimateRepository;
     private final ClientRepository clientRepository;
     private final ProjectRepository projectRepository;
+    private final AuthService authService;
 
     public SupportRequestService(
             SupportRequestRepository supportRequestRepository,
             SupportEstimateRepository supportEstimateRepository,
             ClientRepository clientRepository,
-            ProjectRepository projectRepository) {
+            ProjectRepository projectRepository,
+            AuthService authService) {
         this.supportRequestRepository = supportRequestRepository;
         this.supportEstimateRepository = supportEstimateRepository;
         this.clientRepository = clientRepository;
         this.projectRepository = projectRepository;
+        this.authService = authService;
     }
 
     @Transactional(readOnly = true)
     public List<SupportRequestResponse> findAll() {
         List<SupportRequest> requests = supportRequestRepository.findAll();
+        return requests.stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<SupportRequestResponse> findByClientId(UUID clientId) {
+        List<SupportRequest> requests = supportRequestRepository.findByClientId(clientId);
+        return requests.stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<SupportRequestResponse> findMyRequests(String userId) {
+        User user = authService.getUserById(UUID.fromString(userId));
+        if (user.getClientId() == null) {
+            throw new IllegalArgumentException("User is not associated with a client");
+        }
+        List<SupportRequest> requests = supportRequestRepository.findByClientId(user.getClientId());
         return requests.stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
@@ -231,13 +256,13 @@ public class SupportRequestService {
     private SupportRequestResponse toResponse(SupportRequest request) {
         final String clientName = request.getClientId() != null
                 ? clientRepository.findById(request.getClientId())
-                        .map(Client::getName)
+                        .map(client -> client != null ? client.getName() : null)
                         .orElse(null)
                 : null;
 
         final String projectName = request.getProjectId() != null
                 ? projectRepository.findById(request.getProjectId())
-                        .map(Project::getName)
+                        .map(project -> project != null ? project.getName() : null)
                         .orElse(null)
                 : null;
 

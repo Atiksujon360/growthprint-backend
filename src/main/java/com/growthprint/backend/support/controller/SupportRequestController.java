@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,6 +29,13 @@ public class SupportRequestController {
     @PreAuthorize("hasRole('ADMIN')")
     public List<SupportRequestResponse> list() {
         return supportRequestService.findAll();
+    }
+
+    @GetMapping("/my")
+    @Operation(summary = "List support requests for authenticated client")
+    @PreAuthorize("hasRole('CLIENT')")
+    public List<SupportRequestResponse> listMyRequests(@AuthenticationPrincipal String userId) {
+        return supportRequestService.findMyRequests(userId);
     }
 
     @GetMapping("/{id}")
