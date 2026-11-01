@@ -37,6 +37,6 @@ ENV PORT=10000
 EXPOSE 10000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-    CMD-SHELL curl -fsS "http://localhost:${PORT:-10000}/actuator/health" || exit 1
+    CMD curl -fsS "http://localhost:10000/actuator/health" || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java -Dserver.port=${PORT:-10000} -jar /app/app.jar"]
