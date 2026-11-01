@@ -1,16 +1,11 @@
 package com.growthprint.backend.crm.lead.repository;
 
+import com.growthprint.backend.testsupport.AbstractPostgresIntegrationTest;
+import com.growthprint.backend.testsupport.PostgresIntegrationTest;
 import com.growthprint.backend.crm.lead.entity.CrmLead;
 import com.growthprint.backend.crm.lead.entity.CrmLeadEnums;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.time.Instant;
 import java.util.List;
@@ -19,20 +14,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
-@Testcontainers
-@Disabled("Requires Docker - excluded from default test run. Run with -Dtest=CrmLeadRepositoryIntegrationTest to enable.")
-class CrmLeadRepositoryIntegrationTest {
-
-	@Container
-	@ServiceConnection
-	// Resource leak warning suppressed: Testcontainers @Container annotation manages lifecycle automatically
-	@SuppressWarnings("resource")
-	static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
-			DockerImageName.parse("postgres:16-alpine"))
-			.withDatabaseName("growthprint")
-			.withUsername("testuser")
-			.withPassword("testpass");
+@PostgresIntegrationTest
+class CrmLeadRepositoryIntegrationTest extends AbstractPostgresIntegrationTest {
 
 	@Autowired
 	private CrmLeadRepository crmLeadRepository;

@@ -6,6 +6,38 @@ license: CC-BY-NC-SA-4.0
 
 # Spring Boot Patterns
 
+## IMPORTANT: Use Context7 for Current Spring Boot Documentation
+
+**CRITICAL:** Before applying these patterns, use the context7 MCP server to fetch current Spring Boot documentation. Spring Boot APIs evolve with each version.
+
+### How to Use Context7 for Spring Boot
+
+1. **Resolve Spring Boot library ID:**
+   ```
+   mcp_call_tool --server_name=context7 --tool_name=resolve-library-id --arguments='{"query":"your specific question","libraryName":"Spring Boot"}'
+   ```
+
+2. **Query Spring Boot documentation:**
+   ```
+   mcp_call_tool --server_name=context7 --tool_name=query-docs --arguments='{"libraryId":"/spring-projects/spring-boot","query":"your specific question","language":"Java"}'
+   ```
+
+### When to Use Context7 with This Skill
+
+- **Always** before using Spring Boot features (check current API)
+- **Always** when working with Spring Boot 4.x (latest features)
+- **Always** before suggesting configuration patterns
+- **Always** for current JPA and transaction patterns
+- **Always** for Spring Security integration patterns
+
+### Context7 Helps With
+
+- Current Spring Boot auto-configuration options
+- Latest JPA repository patterns and query methods
+- Up-to-date Spring Security configuration
+- Current transaction management patterns
+- Latest testing patterns with Testcontainers
+
 ## Layered Architecture
 
 ```

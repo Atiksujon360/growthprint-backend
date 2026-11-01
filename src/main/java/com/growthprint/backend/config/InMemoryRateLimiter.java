@@ -3,31 +3,49 @@ package com.growthprint.backend.config;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Simple fixed-window, in-memory rate limiter (single application instance only).
+ * Each key gets a window that starts at its first request and lasts {@code window};
+ * at most {@code maxRequests} requests are allowed inside that window.
+ */
 @Component
 public class InMemoryRateLimiter {
 
+    private static final int CLEANUP_EVERY_N_CALLS = 1_000;
+
     private final ConcurrentHashMap<String, RateLimitBucket> buckets = new ConcurrentHashMap<>();
+    private final AtomicLong callCounter = new AtomicLong();
+    private final Clock clock;
+
+    public InMemoryRateLimiter() {
+        this(Clock.systemUTC());
+    }
+
+    InMemoryRateLimiter(Clock clock) {
+        this.clock = clock;
+    }
 
     public boolean tryAcquire(String key, int maxRequests, Duration window) {
-        Instant now = Instant.now();
-        Instant windowStart = now.minus(window);
+        Instant now = clock.instant();
 
         RateLimitBucket bucket = buckets.compute(key, (k, existing) -> {
-            if (existing == null || existing.windowStart.isBefore(windowStart)) {
-                return new RateLimitBucket(windowStart, 1);
+            // Start a new window when there is none yet or the previous one has fully elapsed.
+            if (existing == null || !now.isBefore(existing.windowStart.plus(window))) {
+                return new RateLimitBucket(now, 1);
             }
             existing.count.incrementAndGet();
             return existing;
         });
 
-        // Clean up old entries more aggressively to prevent memory leaks
-        // Every 60 seconds, remove entries older than 2x the configured window
-        if (now.getEpochSecond() % 60 == 0) {
+        // Periodically evict expired buckets so the map cannot grow without bound.
+        if (callCounter.incrementAndGet() % CLEANUP_EVERY_N_CALLS == 0) {
             Instant cleanupThreshold = now.minus(window.multipliedBy(2));
             buckets.entrySet().removeIf(entry -> entry.getValue().windowStart.isBefore(cleanupThreshold));
         }
@@ -36,12 +54,15 @@ public class InMemoryRateLimiter {
     }
 
     public String getClientIdentifier(HttpServletRequest request) {
-        // WARNING: Do not blindly trust X-Forwarded-For headers from untrusted clients.
-        // This header can be spoofed. Only use it when behind a trusted reverse proxy
-        // that validates and overwrites the header. For now, use remote address only.
-        // Future enhancement: Add app.trusted-proxies configuration and implement
-        // trusted proxy validation before using X-Forwarded-For.
+        // Do not read X-Forwarded-For here: clients can spoof it.
+        // server.forward-headers-strategy=native makes Tomcat's RemoteIpValve rewrite
+        // getRemoteAddr() from X-Forwarded-For only when the connection comes from a trusted
+        // internal proxy (e.g. Render's load balancer), so remoteAddr is the real client IP.
         return request.getRemoteAddr();
+    }
+
+    int bucketCount() {
+        return buckets.size();
     }
 
     private static class RateLimitBucket {

@@ -2,6 +2,8 @@ package com.growthprint.backend.proposal.entity;
 
 import jakarta.persistence.*;
 import jakarta.persistence.PreUpdate;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -32,9 +34,13 @@ public class Proposal {
     @Column(name = "scope_summary", nullable = false, columnDefinition = "text")
     private String scopeSummary;
 
+    // JSONB: bind as JSON, not VARCHAR (PostgreSQL rejects varchar into jsonb). Same mapping as Project/OutreachDraft.
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String deliverables;
 
+    // JSONB: bind as JSON, not VARCHAR (PostgreSQL rejects varchar into jsonb). Same mapping as Project/OutreachDraft.
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String exclusions;
 
@@ -45,6 +51,8 @@ public class Proposal {
     @Enumerated(EnumType.STRING)
     private ProposalCurrency currency;
 
+    // JSONB: bind as JSON, not VARCHAR (PostgreSQL rejects varchar into jsonb). Same mapping as Project/OutreachDraft.
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payment_milestones", columnDefinition = "jsonb")
     private String paymentMilestones;
 

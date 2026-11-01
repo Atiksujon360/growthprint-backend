@@ -11,4 +11,7 @@ import java.util.UUID;
 public interface InvoiceLineItemRepository extends JpaRepository<InvoiceLineItem, UUID> {
 
     List<InvoiceLineItem> findByInvoiceId(UUID invoiceId);
+
+    /** Batch read for invoice lists (one query instead of one per invoice). */
+    List<InvoiceLineItem> findByInvoiceIdIn(java.util.Collection<UUID> invoiceIds);
 }

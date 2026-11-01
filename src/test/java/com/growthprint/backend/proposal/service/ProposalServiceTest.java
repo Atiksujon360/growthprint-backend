@@ -143,7 +143,9 @@ class ProposalServiceTest {
                 UUID id = UUID.randomUUID();
                 when(proposalRepository.findById(id)).thenReturn(Optional.empty());
 
-                assertThrows(IllegalArgumentException.class, () -> proposalService.findById(id));
+                // Audit 2026-11-01: not found is a 404 (was IllegalArgumentException -> 400).
+                assertThrows(com.growthprint.backend.proposal.exception.ProposalNotFoundException.class,
+                                () -> proposalService.findById(id));
                 verify(proposalRepository).findById(id);
         }
 
@@ -330,7 +332,8 @@ class ProposalServiceTest {
                 when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
                 when(authService.getUserById(otherUser.getId())).thenReturn(otherUser);
 
-                assertThrows(IllegalStateException.class, () -> proposalService.recordDecision(testProposal.getId(),
+                // Audit 2026-11-01: another client's proposal is a 403 (was IllegalStateException -> 409).
+                assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> proposalService.recordDecision(testProposal.getId(),
                                 command, otherUser.getId().toString()));
         }
 
@@ -356,8 +359,11 @@ class ProposalServiceTest {
                 when(authService.getUserById(testUser.getId())).thenReturn(testUser);
                 when(proposalRepository.save(any(Proposal.class))).thenReturn(testProposal);
 
-                assertThrows(IllegalStateException.class, () -> proposalService.recordDecision(testProposal.getId(),
+                // Audit 2026-11-01: dedicated exception so the EXPIRED status is not rolled back (still 409).
+                assertThrows(com.growthprint.backend.proposal.exception.ProposalExpiredException.class,
+                                () -> proposalService.recordDecision(testProposal.getId(),
                                 command, testUser.getId().toString()));
+                assertEquals(ProposalStatus.EXPIRED, testProposal.getStatus());
         }
 
         @Test

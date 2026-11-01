@@ -59,9 +59,7 @@ public class ProjectService {
                     clientMap.put(client.getId(), client));
         }
 
-        return projects.stream()
-                        .map(project -> toResponseWithMilestones(project, clientMap))
-                .collect(Collectors.toList());
+        return toResponsesWithMilestones(projects, clientMap);
     }
 
     @Transactional(readOnly = true)
@@ -102,9 +100,7 @@ public class ProjectService {
                     clientMap.put(client.getId(), client));
         }
 
-        return projects.stream()
-                        .map(project -> toResponseWithMilestones(project, clientMap))
-                .collect(Collectors.toList());
+        return toResponsesWithMilestones(projects, clientMap);
     }
 
     @Transactional
@@ -211,6 +207,21 @@ public class ProjectService {
                 project.getAssignedLead(),
                 project.getUpdatedAt().toString()
         );
+    }
+
+    /** Milestones for a whole list in one query (was one query per project). */
+    private List<ProjectResponse> toResponsesWithMilestones(List<Project> projects, Map<UUID, Client> clientMap) {
+        if (projects.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, List<Milestone>> milestonesByProject = milestoneRepository
+                .findByProjectIdIn(projects.stream().map(Project::getId).collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.groupingBy(Milestone::getProjectId));
+        return projects.stream()
+                .map(project -> toResponseWithMilestone(project,
+                        milestonesByProject.getOrDefault(project.getId(), List.of()), clientMap))
+                .collect(Collectors.toList());
     }
 
     private ProjectResponse toResponseWithMilestones(Project project, Map<UUID, Client> clientMap) {

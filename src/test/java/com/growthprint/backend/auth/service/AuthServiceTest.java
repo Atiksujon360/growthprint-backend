@@ -97,6 +97,19 @@ class AuthServiceTest {
     }
 
     @Test
+    void authenticate_UserNotFound_StillPerformsPasswordCheckToPreventTimingEnumeration() {
+        String email = "nobody@example.com";
+        String password = "password123";
+
+        when(userRepository.findByNormalizedEmailAndAccountStatus(email, AccountStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+
+        assertThrows(AuthenticationFailedException.class, () -> authService.authenticate(email, password));
+        org.mockito.Mockito.verify(passwordEncoder).matches(org.mockito.ArgumentMatchers.eq(password),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void authenticate_DisabledAccount_ThrowsException() {
         String email = "disabled@example.com";
         String password = "password123";

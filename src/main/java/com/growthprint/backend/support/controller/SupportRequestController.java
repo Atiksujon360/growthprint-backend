@@ -5,6 +5,7 @@ import com.growthprint.backend.support.service.SupportRequestService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -48,7 +49,7 @@ public class SupportRequestController {
     @PostMapping
     @Operation(summary = "Create a support request")
     @PreAuthorize("hasRole('ADMIN')")
-    public SupportRequestResponse create(@RequestBody CreateSupportRequestCommand command) {
+    public SupportRequestResponse create(@Valid @RequestBody CreateSupportRequestCommand command) {
         return supportRequestService.create(command);
     }
 
@@ -56,38 +57,41 @@ public class SupportRequestController {
     @Operation(summary = "Create a support request for authenticated client")
     @PreAuthorize("hasRole('CLIENT')")
     public SupportRequestResponse createMyRequest(
-            @RequestBody CreateMySupportRequestCommand command,
+            @Valid @RequestBody CreateMySupportRequestCommand command,
             @AuthenticationPrincipal String userId) {
         return supportRequestService.createMyRequest(command, userId);
     }
 
     @PostMapping("/{id}/classify")
-    @Operation(summary = "Classify a support request")
+    @Operation(summary = "Classify a support request",
+            description = "Only allowed while the request is NEW or NEEDS_CLASSIFICATION; otherwise 400.")
     @PreAuthorize("hasRole('ADMIN')")
-    public SupportRequestResponse classify(@PathVariable UUID id, @RequestBody ClassifyRequestCommand command) {
+    public SupportRequestResponse classify(@PathVariable UUID id, @Valid @RequestBody ClassifyRequestCommand command) {
         return supportRequestService.classify(id, command);
     }
 
     @PostMapping("/{id}/estimate")
     @Operation(summary = "Attach an estimate to a support request")
     @PreAuthorize("hasRole('ADMIN')")
-    public SupportRequestResponse attachEstimate(@PathVariable UUID id, @RequestBody AttachEstimateCommand command) {
+    public SupportRequestResponse attachEstimate(@PathVariable UUID id, @Valid @RequestBody AttachEstimateCommand command) {
         return supportRequestService.attachEstimate(id, command);
     }
 
     @PostMapping("/{id}/approve-estimate")
     @Operation(summary = "Approve an estimate for a support request")
     @PreAuthorize("hasRole('ADMIN')")
-    public SupportRequestResponse approveEstimate(@PathVariable UUID id, @RequestBody ApproveEstimateCommand command) {
+    public SupportRequestResponse approveEstimate(@PathVariable UUID id, @Valid @RequestBody ApproveEstimateCommand command) {
         return supportRequestService.approveEstimate(id, command);
     }
 
     @PostMapping("/my/{id}/approve-estimate")
-    @Operation(summary = "Approve an estimate for authenticated client's support request")
+    @Operation(summary = "Approve an estimate for authenticated client's support request",
+            description = "The approval is recorded against the authenticated user's email; the approvedBy "
+                    + "field is accepted for backwards compatibility but ignored. Another client's request returns 404.")
     @PreAuthorize("hasRole('CLIENT')")
     public SupportRequestResponse approveMyEstimate(
             @PathVariable UUID id,
-            @RequestBody ApproveEstimateCommand command,
+            @Valid @RequestBody ApproveEstimateCommand command,
             @AuthenticationPrincipal String userId) {
         return supportRequestService.approveMyEstimate(id, command, userId);
     }
@@ -95,7 +99,7 @@ public class SupportRequestController {
     @PatchMapping("/{id}/status")
     @Operation(summary = "Update support request status")
     @PreAuthorize("hasRole('ADMIN')")
-    public SupportRequestResponse updateStatus(@PathVariable UUID id, @RequestBody UpdateRequestStatusCommand command) {
+    public SupportRequestResponse updateStatus(@PathVariable UUID id, @Valid @RequestBody UpdateRequestStatusCommand command) {
         return supportRequestService.updateStatus(id, command);
     }
 }

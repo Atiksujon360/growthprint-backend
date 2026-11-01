@@ -3,6 +3,7 @@ package com.growthprint.backend.config;
 import com.growthprint.backend.security.JwtAccessDeniedHandler;
 import com.growthprint.backend.security.JwtAuthenticationEntryPoint;
 import com.growthprint.backend.security.JwtAuthenticationFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -14,11 +15,13 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -30,6 +33,9 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
 
+    @Value("${app.cors.allowed-origins:http://localhost:3000}")
+    private String corsAllowedOrigins;
+
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
             JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint, JwtAccessDeniedHandler jwtAccessDeniedHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
@@ -37,19 +43,55 @@ public class SecurityConfig {
         this.jwtAccessDeniedHandler = jwtAccessDeniedHandler;
     }
 
+    /**
+     * Single source of truth for CORS (previously duplicated in CorsConfig).
+     * Origins come from app.cors.allowed-origins / CORS_ALLOWED_ORIGINS (comma-separated).
+     */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        CorsConfigurationSource corsConfigurationSource = new UrlBasedCorsConfigurationSource();
+    public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration corsConfiguration = new CorsConfiguration();
-        corsConfiguration.setAllowedOrigins(List.of("http://localhost:3000"));
+        corsConfiguration.setAllowedOrigins(parseAllowedOrigins(corsAllowedOrigins));
         corsConfiguration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         corsConfiguration.setAllowedHeaders(List.of("*"));
+        corsConfiguration.setExposedHeaders(List.of("X-Correlation-ID"));
         corsConfiguration.setAllowCredentials(true);
-        ((UrlBasedCorsConfigurationSource) corsConfigurationSource).registerCorsConfiguration("/**", corsConfiguration);
+        corsConfiguration.setMaxAge(3600L);
 
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", corsConfiguration);
+        return source;
+    }
+
+    /**
+     * Parses a comma-separated origin list, trimming whitespace and dropping empty entries.
+     * A wildcard "*" is rejected because credentials are allowed.
+     */
+    static List<String> parseAllowedOrigins(String rawOrigins) {
+        if (rawOrigins == null) {
+            return List.of();
+        }
+        List<String> origins = Arrays.stream(rawOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+        if (origins.contains("*")) {
+            throw new IllegalStateException(
+                    "CORS_ALLOWED_ORIGINS must list explicit origins; '*' is not allowed with credentials");
+        }
+        return origins;
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                // CSRF is not needed: the API is stateless and authenticates via the Authorization header,
+                // not cookies, so browsers cannot attach credentials cross-site automatically.
                 .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                // Call the @Bean method directly (proxied -> same singleton). Injecting by type would be
+                // ambiguous because Spring MVC's HandlerMappingIntrospector is also a CorsConfigurationSource.
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .headers(headers -> headers
+                        .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER)))
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                         .accessDeniedHandler(jwtAccessDeniedHandler))
@@ -69,6 +111,8 @@ public class SecurityConfig {
                         // Client-specific endpoints - require CLIENT role with server-side ownership validation
                         .requestMatchers("/api/v1/support-requests/my/**").hasRole("CLIENT")
                         .requestMatchers("/api/v1/invoices/my").hasRole("CLIENT")
+                        // Client payment reports (must precede the ADMIN-only /api/v1/invoices/** rule)
+                        .requestMatchers("/api/v1/invoices/my/**").hasRole("CLIENT")
                         .requestMatchers("/api/v1/projects/my").hasRole("CLIENT")
                         .requestMatchers("/api/v1/proposals/my/**").hasRole("CLIENT")
 

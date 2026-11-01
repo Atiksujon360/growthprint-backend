@@ -4,6 +4,7 @@ import com.growthprint.backend.auth.entity.User;
 import com.growthprint.backend.auth.service.AuthService;
 import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.repository.ClientRepository;
+import com.growthprint.backend.common.validation.EnumValues;
 import com.growthprint.backend.project.entity.Project;
 import com.growthprint.backend.project.repository.ProjectRepository;
 import com.growthprint.backend.support.dto.*;
@@ -17,13 +18,31 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.Year;
+import java.time.ZoneOffset;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 public class SupportRequestService {
+
+    /** Classification is only meaningful before an estimate exists (prevents duplicate estimates). */
+    private static final Set<SupportRequestStatus> CLASSIFIABLE_STATUSES =
+            EnumSet.of(SupportRequestStatus.NEW, SupportRequestStatus.NEEDS_CLASSIFICATION);
+    private static final int MAX_REFERENCE_ATTEMPTS = 10;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final SupportRequestRepository supportRequestRepository;
     private final SupportEstimateRepository supportEstimateRepository;
@@ -46,18 +65,12 @@ public class SupportRequestService {
 
     @Transactional(readOnly = true)
     public List<SupportRequestResponse> findAll() {
-        List<SupportRequest> requests = supportRequestRepository.findAll();
-        return requests.stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+        return toResponses(supportRequestRepository.findAll());
     }
 
     @Transactional(readOnly = true)
     public List<SupportRequestResponse> findByClientId(UUID clientId) {
-        List<SupportRequest> requests = supportRequestRepository.findByClientId(clientId);
-        return requests.stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+        return toResponses(supportRequestRepository.findByClientId(clientId));
     }
 
     @Transactional(readOnly = true)
@@ -66,10 +79,7 @@ public class SupportRequestService {
         if (user.getClientId() == null) {
             throw new IllegalArgumentException("User is not associated with a client");
         }
-        List<SupportRequest> requests = supportRequestRepository.findByClientId(user.getClientId());
-        return requests.stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+        return toResponses(supportRequestRepository.findByClientId(user.getClientId()));
     }
 
     @Transactional(readOnly = true)
@@ -81,30 +91,21 @@ public class SupportRequestService {
 
     @Transactional
     public SupportRequestResponse create(CreateSupportRequestCommand command) {
-        Client client = clientRepository.findById(UUID.fromString(command.clientId()))
+        Client client = clientRepository.findById(parseUuid(command.clientId(), "clientId"))
                 .orElseThrow(() -> new IllegalArgumentException("Client not found"));
 
         Project project = null;
-        if (command.projectId() != null) {
-            project = projectRepository.findById(UUID.fromString(command.projectId()))
+        if (command.projectId() != null && !command.projectId().isBlank()) {
+            project = projectRepository.findById(parseUuid(command.projectId(), "projectId"))
                     .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+            if (!project.getClientId().equals(client.getId())) {
+                throw new IllegalArgumentException("Project does not belong to the selected client");
+            }
         }
 
-        String reference = generateReference();
-
-        SupportRequest request = new SupportRequest();
-        request.setReference(reference);
-        request.setClientId(client.getId());
-        request.setProjectId(project != null ? project.getId() : null);
-        request.setTitle(command.title());
-        request.setCategory(SupportCategory.valueOf(command.category()));
-        request.setDescription(command.description());
-        request.setBusinessImpact(BusinessImpact.valueOf(command.businessImpact()));
-        request.setUrgency(Urgency.valueOf(command.urgency()));
-        request.setStatus(SupportRequestStatus.NEW);
-
-        SupportRequest savedRequest = supportRequestRepository.save(request);
-        return toResponse(savedRequest);
+        SupportRequest request = newRequest(client.getId(), project, command.title(), command.category(),
+                command.description(), command.businessImpact(), command.urgency());
+        return toResponse(supportRequestRepository.save(request));
     }
 
     @Transactional
@@ -118,8 +119,8 @@ public class SupportRequestService {
                 .orElseThrow(() -> new IllegalArgumentException("Client not found"));
 
         Project project = null;
-        if (command.projectId() != null) {
-            project = projectRepository.findById(UUID.fromString(command.projectId()))
+        if (command.projectId() != null && !command.projectId().isBlank()) {
+            project = projectRepository.findById(parseUuid(command.projectId(), "projectId"))
                     .orElseThrow(() -> new IllegalArgumentException("Project not found"));
             // Verify project belongs to the client
             if (!project.getClientId().equals(user.getClientId())) {
@@ -127,21 +128,9 @@ public class SupportRequestService {
             }
         }
 
-        String reference = generateReference();
-
-        SupportRequest request = new SupportRequest();
-        request.setReference(reference);
-        request.setClientId(client.getId());
-        request.setProjectId(project != null ? project.getId() : null);
-        request.setTitle(command.title());
-        request.setCategory(SupportCategory.valueOf(command.category()));
-        request.setDescription(command.description());
-        request.setBusinessImpact(BusinessImpact.valueOf(command.businessImpact()));
-        request.setUrgency(Urgency.valueOf(command.urgency()));
-        request.setStatus(SupportRequestStatus.NEW);
-
-        SupportRequest savedRequest = supportRequestRepository.save(request);
-        return toResponse(savedRequest);
+        SupportRequest request = newRequest(client.getId(), project, command.title(), command.category(),
+                command.description(), command.businessImpact(), command.urgency());
+        return toResponse(supportRequestRepository.save(request));
     }
 
     @Transactional
@@ -149,7 +138,15 @@ public class SupportRequestService {
         SupportRequest request = supportRequestRepository.findById(id)
                 .orElseThrow(() -> new SupportRequestNotFoundException("Support request not found"));
 
-        request.setCategory(SupportCategory.valueOf(command.category()));
+        // Re-classifying after an estimate exists used to reset the request to ESTIMATE_PENDING and allow a
+        // second estimate; support_estimates has no unique(request_id), which then broke every read.
+        if (!CLASSIFIABLE_STATUSES.contains(request.getStatus())) {
+            throw new InvalidSupportRequestStatusTransitionException(
+                    "Requests can only be classified while NEW or NEEDS_CLASSIFICATION (current: "
+                            + request.getStatus() + ")");
+        }
+
+        request.setCategory(EnumValues.parse(SupportCategory.class, command.category(), "category"));
         request.setAdminNotes(command.adminNotes());
 
         if (request.getCategory() == SupportCategory.INCLUDED_SUPPORT) {
@@ -158,8 +155,7 @@ public class SupportRequestService {
             request.setStatus(SupportRequestStatus.ESTIMATE_PENDING);
         }
 
-        SupportRequest savedRequest = supportRequestRepository.save(request);
-        return toResponse(savedRequest);
+        return toResponse(supportRequestRepository.save(request));
     }
 
     @Transactional
@@ -170,6 +166,10 @@ public class SupportRequestService {
         if (request.getStatus() != SupportRequestStatus.ESTIMATE_PENDING) {
             throw new InvalidSupportRequestStatusTransitionException(
                     "Estimates can only be attached to requests in ESTIMATE_PENDING status");
+        }
+        if (supportEstimateRepository.findFirstByRequestIdOrderByCreatedAtDesc(request.getId()).isPresent()) {
+            throw new InvalidSupportRequestStatusTransitionException(
+                    "An estimate is already attached to this request");
         }
 
         // Calculate estimate totals
@@ -193,6 +193,8 @@ public class SupportRequestService {
         estimate.setSubtotal(subtotal);
         estimate.setDiscount(discount);
         estimate.setTotalAmount(totalAmount);
+        // NOTE: currency is fixed to USD (pre-existing behaviour); per-client currency is an open business
+        // question documented in the 2026-11-01 audit.
         estimate.setCurrency("USD");
         estimate.setDeliveryTimelineDays(command.deliveryTimelineDays());
         estimate.setExplanation(command.explanation());
@@ -202,32 +204,18 @@ public class SupportRequestService {
 
         request.setStatus(SupportRequestStatus.AWAITING_CLIENT_APPROVAL);
 
-        SupportRequest savedRequest = supportRequestRepository.save(request);
-        return toResponse(savedRequest);
+        return toResponse(supportRequestRepository.save(request));
     }
 
+    /**
+     * Admin records an approval on the client's behalf (e.g. given by phone/email), so the submitted
+     * {@code approvedBy} name is kept for this path.
+     */
     @Transactional
     public SupportRequestResponse approveEstimate(UUID id, ApproveEstimateCommand command) {
         SupportRequest request = supportRequestRepository.findById(id)
                 .orElseThrow(() -> new SupportRequestNotFoundException("Support request not found"));
-
-        if (request.getStatus() != SupportRequestStatus.AWAITING_CLIENT_APPROVAL) {
-            throw new InvalidSupportRequestStatusTransitionException(
-                    "Estimates can only be approved for requests in AWAITING_CLIENT_APPROVAL status");
-        }
-
-        // Update the estimate status
-        SupportEstimate estimate = supportEstimateRepository.findByRequestId(request.getId())
-                .orElseThrow(() -> new IllegalArgumentException("Estimate not found for this request"));
-        estimate.setStatus(SupportEstimateStatus.ACCEPTED);
-        estimate.setAcceptedAt(Instant.now());
-        estimate.setAcceptedBy(command.approvedBy());
-        supportEstimateRepository.save(estimate);
-
-        request.setStatus(SupportRequestStatus.READY_TO_START);
-
-        SupportRequest savedRequest = supportRequestRepository.save(request);
-        return toResponse(savedRequest);
+        return acceptEstimate(request, command.approvedBy());
     }
 
     @Transactional
@@ -238,31 +226,15 @@ public class SupportRequestService {
             throw new IllegalArgumentException("User is not associated with a client");
         }
 
-        // Fetch support request and verify ownership
+        // Fetch support request and verify ownership. Another client's request is reported as "not found"
+        // so that request ids of other clients cannot be probed.
         SupportRequest request = supportRequestRepository.findById(id)
+                .filter(found -> user.getClientId().equals(found.getClientId()))
                 .orElseThrow(() -> new SupportRequestNotFoundException("Support request not found"));
 
-        if (!request.getClientId().equals(user.getClientId())) {
-            throw new IllegalArgumentException("Support request does not belong to the authenticated client");
-        }
-
-        if (request.getStatus() != SupportRequestStatus.AWAITING_CLIENT_APPROVAL) {
-            throw new InvalidSupportRequestStatusTransitionException(
-                    "Estimates can only be approved for requests in AWAITING_CLIENT_APPROVAL status");
-        }
-
-        // Update the estimate status
-        SupportEstimate estimate = supportEstimateRepository.findByRequestId(request.getId())
-                .orElseThrow(() -> new IllegalArgumentException("Estimate not found for this request"));
-        estimate.setStatus(SupportEstimateStatus.ACCEPTED);
-        estimate.setAcceptedAt(Instant.now());
-        estimate.setAcceptedBy(command.approvedBy());
-        supportEstimateRepository.save(estimate);
-
-        request.setStatus(SupportRequestStatus.READY_TO_START);
-
-        SupportRequest savedRequest = supportRequestRepository.save(request);
-        return toResponse(savedRequest);
+        // The audit trail records who actually approved: the authenticated user, never a client-supplied name.
+        // (approvedBy is still accepted in the request body for backwards compatibility, but ignored here.)
+        return acceptEstimate(request, user.getEmail());
     }
 
     @Transactional
@@ -270,7 +242,7 @@ public class SupportRequestService {
         SupportRequest request = supportRequestRepository.findById(id)
                 .orElseThrow(() -> new SupportRequestNotFoundException("Support request not found"));
 
-        SupportRequestStatus newStatus = SupportRequestStatus.valueOf(command.status());
+        SupportRequestStatus newStatus = EnumValues.parse(SupportRequestStatus.class, command.status(), "status");
 
         if (!isValidStatusTransition(request.getStatus(), newStatus)) {
             throw new InvalidSupportRequestStatusTransitionException(
@@ -279,8 +251,41 @@ public class SupportRequestService {
 
         request.setStatus(newStatus);
 
-        SupportRequest savedRequest = supportRequestRepository.save(request);
-        return toResponse(savedRequest);
+        return toResponse(supportRequestRepository.save(request));
+    }
+
+    private SupportRequestResponse acceptEstimate(SupportRequest request, String acceptedBy) {
+        if (request.getStatus() != SupportRequestStatus.AWAITING_CLIENT_APPROVAL) {
+            throw new InvalidSupportRequestStatusTransitionException(
+                    "Estimates can only be approved for requests in AWAITING_CLIENT_APPROVAL status");
+        }
+
+        SupportEstimate estimate = supportEstimateRepository.findFirstByRequestIdOrderByCreatedAtDesc(request.getId())
+                .orElseThrow(() -> new InvalidSupportRequestStatusTransitionException(
+                        "No estimate is attached to this request"));
+        estimate.setStatus(SupportEstimateStatus.ACCEPTED);
+        estimate.setAcceptedAt(Instant.now());
+        estimate.setAcceptedBy(acceptedBy);
+        supportEstimateRepository.save(estimate);
+
+        request.setStatus(SupportRequestStatus.READY_TO_START);
+
+        return toResponse(supportRequestRepository.save(request));
+    }
+
+    private SupportRequest newRequest(UUID clientId, Project project, String title, String category,
+                                      String description, String businessImpact, String urgency) {
+        SupportRequest request = new SupportRequest();
+        request.setReference(generateReference());
+        request.setClientId(clientId);
+        request.setProjectId(project != null ? project.getId() : null);
+        request.setTitle(title);
+        request.setCategory(EnumValues.parse(SupportCategory.class, category, "category"));
+        request.setDescription(description);
+        request.setBusinessImpact(EnumValues.parse(BusinessImpact.class, businessImpact, "businessImpact"));
+        request.setUrgency(EnumValues.parse(Urgency.class, urgency, "urgency"));
+        request.setStatus(SupportRequestStatus.NEW);
+        return request;
     }
 
     private boolean isValidStatusTransition(SupportRequestStatus current, SupportRequestStatus newStatus) {
@@ -321,27 +326,74 @@ public class SupportRequestService {
         }
     }
 
+    /**
+     * GP-REQ-{UTC year}-{8 hex chars}: ~4.3 billion values per year (was 900 values with a hard-coded
+     * year). Uniqueness is still enforced by the database; the bounded retry only avoids a needless 409.
+     */
     private String generateReference() {
-        return "GP-REQ-2026-" + (int) (Math.random() * 900 + 100);
+        int year = Year.now(ZoneOffset.UTC).getValue();
+        for (int attempt = 0; attempt < MAX_REFERENCE_ATTEMPTS; attempt++) {
+            String candidate = "GP-REQ-" + year + "-"
+                    + String.format(Locale.ROOT, "%08X", RANDOM.nextInt());
+            if (supportRequestRepository.findByReference(candidate).isEmpty()) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Could not allocate a unique support request reference");
+    }
+
+    private static UUID parseUuid(String value, String fieldName) {
+        try {
+            return UUID.fromString(value.trim());
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException(fieldName + " must be a valid UUID");
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Mapping (lists are batch-loaded: 3 queries in total instead of 3 per request)
+    // ---------------------------------------------------------------------------------------------
+
+    private List<SupportRequestResponse> toResponses(List<SupportRequest> requests) {
+        if (requests.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, String> clientNames = clientRepository.findAllById(distinct(requests, SupportRequest::getClientId))
+                .stream().collect(Collectors.toMap(Client::getId, Client::getName, (a, b) -> a));
+        Map<UUID, String> projectNames = projectRepository.findAllById(distinct(requests, SupportRequest::getProjectId))
+                .stream().collect(Collectors.toMap(Project::getId, Project::getName, (a, b) -> a));
+        Map<UUID, SupportEstimate> latestEstimates = new HashMap<>();
+        supportEstimateRepository.findByRequestIdIn(distinct(requests, SupportRequest::getId)).forEach(estimate ->
+                latestEstimates.merge(estimate.getRequestId(), estimate, (a, b) ->
+                        Comparator.comparing(SupportEstimate::getCreatedAt,
+                                Comparator.nullsFirst(Comparator.naturalOrder())).compare(a, b) >= 0 ? a : b));
+
+        return requests.stream()
+                .map(request -> toResponse(request,
+                        clientNames.get(request.getClientId()),
+                        request.getProjectId() != null ? projectNames.get(request.getProjectId()) : null,
+                        latestEstimates.get(request.getId())))
+                .collect(Collectors.toList());
     }
 
     private SupportRequestResponse toResponse(SupportRequest request) {
-        final String clientName = request.getClientId() != null
-                ? clientRepository.findById(request.getClientId())
-                        .map(client -> client != null ? client.getName() : null)
-                        .orElse(null)
+        String clientName = request.getClientId() != null
+                ? clientRepository.findById(request.getClientId()).map(Client::getName).orElse(null)
                 : null;
-
-        final String projectName = request.getProjectId() != null
-                ? projectRepository.findById(request.getProjectId())
-                        .map(project -> project != null ? project.getName() : null)
-                        .orElse(null)
+        String projectName = request.getProjectId() != null
+                ? projectRepository.findById(request.getProjectId()).map(Project::getName).orElse(null)
                 : null;
+        SupportEstimate estimate = request.getId() != null
+                ? supportEstimateRepository.findFirstByRequestIdOrderByCreatedAtDesc(request.getId()).orElse(null)
+                : null;
+        return toResponse(request, clientName, projectName, estimate);
+    }
 
-        // Fetch estimate if exists
-        final SupportRequestResponse.SupportEstimateResponse estimate = supportEstimateRepository.findByRequestId(request.getId())
-                .map(est -> new SupportRequestResponse.SupportEstimateResponse(
-                        est.getId().toString(),
+    private SupportRequestResponse toResponse(SupportRequest request, String clientName, String projectName,
+                                              SupportEstimate est) {
+        SupportRequestResponse.SupportEstimateResponse estimate = est == null ? null
+                : new SupportRequestResponse.SupportEstimateResponse(
+                        est.getId() != null ? est.getId().toString() : null,
                         est.getRequestId().toString(),
                         est.getEstimatedHours().toString(),
                         est.getHourlyRate().toString(),
@@ -352,11 +404,9 @@ public class SupportRequestService {
                         est.getDeliveryTimelineDays(),
                         est.getExplanation(),
                         est.getStatus().name(),
-                        est.getCreatedAt().toString(),
+                        est.getCreatedAt() != null ? est.getCreatedAt().toString() : null,
                         est.getAcceptedAt() != null ? est.getAcceptedAt().toString() : null,
-                        est.getAcceptedBy()
-                ))
-                .orElse(null);
+                        est.getAcceptedBy());
 
         return new SupportRequestResponse(
                 request.getId().toString(),
@@ -373,9 +423,13 @@ public class SupportRequestService {
                 request.getStatus().name(),
                 request.getAdminNotes(),
                 request.getResolutionSummary(),
-                request.getCreatedAt().toString(),
-                request.getUpdatedAt().toString(),
+                request.getCreatedAt() != null ? request.getCreatedAt().toString() : null,
+                request.getUpdatedAt() != null ? request.getUpdatedAt().toString() : null,
                 estimate
         );
+    }
+
+    private static <T> Collection<UUID> distinct(List<T> items, Function<T, UUID> getter) {
+        return items.stream().map(getter).filter(Objects::nonNull).collect(Collectors.toSet());
     }
 }

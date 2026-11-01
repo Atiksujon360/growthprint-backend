@@ -4,6 +4,22 @@
 
 This document outlines security policies, authentication, authorization, secrets management, and vulnerability handling for the GrowthPrint backend. All security practices are based on OWASP ASVS and OWASP Cheat Sheet Series.
 
+## Security Hardening Log (2026-11-01)
+
+| Change | Why |
+|---|---|
+| Removed the hard-coded `JWT_SECRET` fallback from `application.yml`; startup now fails if `JWT_SECRET` is missing, < 32 chars, or equal to the old default | The old default was public in the repo, so anyone could have forged ADMIN tokens if the env var was ever missing |
+| JWT issuer (`iss`) is now verified; key bytes use UTF-8; role claim must be a known `UserRole` | Defence in depth against foreign/forged tokens |
+| Fixed `InMemoryRateLimiter` window bug (counter reset on almost every request) | Public inquiry rate limit was effectively disabled |
+| Added per-IP rate limit on `POST /api/v1/auth/login` (`app.rate-limit.login`, default 10/min) with `Retry-After` | Password brute-force protection |
+| `server.forward-headers-strategy: native` | Real client IP behind Render's proxy (only trusted internal proxies honoured) and HTTPS detection for HSTS |
+| Login does a dummy BCrypt check for unknown emails | Prevents account enumeration via response timing |
+| `GlobalExceptionHandler`: 401 bad login, 403 access denied, 400 bad input/UUID, 409 invalid state, sanitized 500 | Unmapped errors previously surfaced as misleading 401s; no internals leak |
+| 401/403/429 JSON bodies written via `ApiErrorResponseWriter` | Bare `ObjectMapper` could not serialize `Instant`, so these bodies failed |
+| One CORS configuration (in `SecurityConfig`), `*` origin rejected, `X-Correlation-ID` exposed | Two competing CORS configs removed |
+| Swagger/OpenAPI toggle via `SPRINGDOC_ENABLED` (default `true`) | DEPLOYMENT.md already required it off in prod but it wasn't wired |
+| `Referrer-Policy: no-referrer`; server error pages never include stack traces/messages | Information leakage |
+
 ## Authentication
 
 ### JWT-Based Authentication

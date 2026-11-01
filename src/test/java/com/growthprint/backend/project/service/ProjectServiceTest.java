@@ -92,7 +92,8 @@ class ProjectServiceTest {
     @Test
     void findAll_ReturnsAllProjects() {
         when(projectRepository.findAll()).thenReturn(List.of(testProject));
-        when(milestoneRepository.findByProjectId(testProject.getId())).thenReturn(List.of());
+        // Audit 2026-11-01: list endpoints batch-load milestones in one query.
+        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of());
         when(clientRepository.findAllById(List.of(testClient.getId()))).thenReturn(List.of(testClient));
 
         var result = projectService.findAll();
