@@ -1,11 +1,13 @@
+
 # Multi-stage Dockerfile for GrowthPrint Backend
+
 # Stage 1: Build with Maven and Java 21
-FROM maven:3.9.21-eclipse-temurin-21 AS build
+FROM maven:3.9.16-eclipse-temurin-21 AS build
 
 WORKDIR /app
 
-COPY mvnw mvnw.cmd ./
-COPY .mvn .mvn
+COPY mvnw ./
+COPY .mvn ./.mvn
 COPY pom.xml ./
 
 RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
@@ -30,9 +32,11 @@ COPY --from=build /app/target/*.jar /app/app.jar
 
 USER growthprint
 
-EXPOSE 8090
+ENV PORT=10000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -fsS http://localhost:8090/actuator/health || exit 1
+EXPOSE 10000
 
-ENTRYPOINT ["sh", "-c", "exec java -Dserver.port=${PORT:-8090} -jar /app/app.jar"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD-SHELL curl -fsS "http://localhost:${PORT:-10000}/actuator/health" || exit 1
+
+ENTRYPOINT ["sh", "-c", "exec java -Dserver.port=${PORT:-10000} -jar /app/app.jar"]
