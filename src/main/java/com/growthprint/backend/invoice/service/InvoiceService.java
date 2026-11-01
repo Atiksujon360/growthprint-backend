@@ -3,13 +3,13 @@ package com.growthprint.backend.invoice.service;
 import com.growthprint.backend.auth.entity.User;
 import com.growthprint.backend.auth.service.AuthService;
 import com.growthprint.backend.client.entity.Client;
+import com.growthprint.backend.client.exception.ClientNotFoundException;
 import com.growthprint.backend.client.repository.ClientRepository;
 import com.growthprint.backend.invoice.dto.CreateInvoiceCommand;
 import com.growthprint.backend.invoice.dto.InvoiceLineItemResponse;
 import com.growthprint.backend.invoice.dto.InvoiceResponse;
 import com.growthprint.backend.invoice.dto.MarkInvoicePaidCommand;
 import com.growthprint.backend.invoice.entity.Invoice;
-import com.growthprint.backend.invoice.entity.InvoiceCurrency;
 import com.growthprint.backend.invoice.entity.InvoiceLineItem;
 import com.growthprint.backend.invoice.entity.InvoiceStatus;
 import com.growthprint.backend.invoice.exception.InvoiceAlreadyExistsException;
@@ -23,11 +23,21 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.util.*;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 public class InvoiceService {
+
+    /**
+     * Statuses an invoice may be created in. PAID needs a paid_at timestamp and an authorised
+     * reconciliation, VOID/OVERDUE are lifecycle outcomes; none of them may be set at creation time.
+     */
+    private static final Set<InvoiceStatus> CREATABLE_STATUSES = EnumSet.of(InvoiceStatus.DRAFT, InvoiceStatus.ISSUED);
 
     private final InvoiceRepository invoiceRepository;
     private final InvoiceLineItemRepository lineItemRepository;
@@ -44,38 +54,12 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public List<InvoiceResponse> findAll() {
-        List<Invoice> invoices = invoiceRepository.findAll();
-
-        // Batch fetch all clients to avoid N+1 queries
-        List<UUID> clientIds = invoices.stream()
-                .map(Invoice::getClientId)
-                .distinct()
-                .toList();
-
-        Map<UUID, Client> clientMap = new HashMap<>();
-        if (!clientIds.isEmpty()) {
-            clientRepository.findAllById(clientIds).forEach(client ->
-                    clientMap.put(client.getId(), client));
-        }
-
-        return invoices.stream()
-                .map(invoice -> toResponseWithLineItems(invoice, clientMap))
-                .collect(Collectors.toList());
+        return toResponses(invoiceRepository.findAll());
     }
 
     @Transactional(readOnly = true)
     public List<InvoiceResponse> findByClientId(UUID clientId) {
-        List<Invoice> invoices = invoiceRepository.findByClientId(clientId);
-
-        Client client = clientRepository.findById(clientId).orElse(null);
-        Map<UUID, Client> clientMap = new HashMap<>();
-        if (client != null) {
-            clientMap.put(clientId, client);
-        }
-
-        return invoices.stream()
-                .map(invoice -> toResponseWithLineItems(invoice, clientMap))
-                .collect(Collectors.toList());
+        return toResponses(invoiceRepository.findByClientId(clientId));
     }
 
     @Transactional(readOnly = true)
@@ -84,42 +68,29 @@ public class InvoiceService {
         if (user.getClientId() == null) {
             throw new IllegalArgumentException("User is not associated with a client");
         }
-        List<Invoice> invoices = invoiceRepository.findByClientId(user.getClientId());
-
-        Client client = clientRepository.findById(user.getClientId()).orElse(null);
-        Map<UUID, Client> clientMap = new HashMap<>();
-        if (client != null) {
-            clientMap.put(user.getClientId(), client);
-        }
-
-        return invoices.stream()
-                .map(invoice -> toResponseWithLineItems(invoice, clientMap))
-                .collect(Collectors.toList());
+        return toResponses(invoiceRepository.findByClientId(user.getClientId()));
     }
 
     @Transactional(readOnly = true)
     public InvoiceResponse findById(UUID id) {
         Invoice invoice = invoiceRepository.findById(id)
                 .orElseThrow(() -> new InvoiceNotFoundException("Invoice not found"));
-
-        Client invoiceClient = clientRepository.findById(invoice.getClientId())
-                .orElse(null);
-        Map<UUID, Client> clientMap = new HashMap<>();
-        if (invoiceClient != null) {
-            clientMap.put(invoice.getClientId(), invoiceClient);
-        }
-
-        return toResponseWithLineItems(invoice, clientMap);
+        return toResponse(invoice, lineItemRepository.findByInvoiceId(invoice.getId()));
     }
 
     @Transactional
     public InvoiceResponse create(CreateInvoiceCommand command) {
+        if (!CREATABLE_STATUSES.contains(command.status())) {
+            throw new IllegalArgumentException("Invoices can only be created with status DRAFT or ISSUED");
+        }
+
         if (invoiceRepository.existsByInvoiceNumber(command.invoiceNumber())) {
             throw new InvoiceAlreadyExistsException("Invoice with this number already exists");
         }
 
-        Client invoiceClient = clientRepository.findById(UUID.fromString(command.clientId()))
-                .orElseThrow(() -> new InvoiceNotFoundException("Client not found"));
+        UUID clientId = parseUuid(command.clientId());
+        Client invoiceClient = clientRepository.findById(clientId)
+                .orElseThrow(() -> new ClientNotFoundException(clientId));
 
         // Validate line items
         if (command.lineItems() == null || command.lineItems().isEmpty()) {
@@ -129,6 +100,11 @@ public class InvoiceService {
         validateLineItems(command.lineItems());
         validateInvoiceTotals(command);
 
+        if (command.dueDate().isBefore(command.issueDate())) {
+            throw new IllegalArgumentException("Due date must not be before the issue date");
+        }
+
+        Instant now = Instant.now();
         Invoice invoice = new Invoice(
                 UUID.randomUUID(),
                 command.invoiceNumber(),
@@ -145,8 +121,8 @@ public class InvoiceService {
                 command.status(),
                 null,
                 command.notes(),
-                Instant.now(),
-                Instant.now()
+                now,
+                now
         );
 
         Invoice savedInvoice = invoiceRepository.save(invoice);
@@ -160,23 +136,20 @@ public class InvoiceService {
                         item.quantity(),
                         item.unitPrice(),
                         item.amount(),
-                        Instant.now(),
-                        Instant.now()
+                        now,
+                        now
                 ))
                 .collect(Collectors.toList());
 
         lineItemRepository.saveAll(lineItems);
 
-        Client savedClient = clientRepository.findById(savedInvoice.getClientId())
-                .orElse(null);
-        Map<UUID, Client> clientMap = new HashMap<>();
-        if (savedClient != null) {
-            clientMap.put(savedInvoice.getClientId(), savedClient);
-        }
-
-        return toResponseWithLineItems(savedInvoice, clientMap);
+        return toResponse(savedInvoice, lineItems);
     }
 
+    /**
+     * Admin reconciliation: the only path (directly, or via a verified client payment report) that marks an
+     * invoice PAID. Idempotent for already-paid invoices.
+     */
     @Transactional
     public InvoiceResponse markPaid(UUID id, MarkInvoicePaidCommand command) {
         Invoice invoice = invoiceRepository.findById(id)
@@ -188,36 +161,41 @@ public class InvoiceService {
                     "Only PAID status is allowed for reconciliation operation");
         }
 
-        // Validate status transition rules
+        return toResponse(applyPaid(invoice), lineItemRepository.findByInvoiceId(invoice.getId()));
+    }
+
+    /**
+     * Shared PAID transition used by {@link #markPaid} and by payment-report verification.
+     * Must be called inside a transaction.
+     */
+    public Invoice applyPaid(Invoice invoice) {
         if (invoice.getStatus() == InvoiceStatus.VOID) {
-            throw new InvalidInvoiceStatusTransitionException(
-                    "Cannot mark a VOID invoice as PAID");
+            throw new InvalidInvoiceStatusTransitionException("Cannot mark a VOID invoice as PAID");
         }
-
         if (invoice.getStatus() == InvoiceStatus.PAID) {
-            // Idempotent: return existing state without changes
-            return toResponseWithLineItems(invoice, new HashMap<>());
+            return invoice; // idempotent
         }
-
         invoice.setStatus(InvoiceStatus.PAID);
         invoice.setPaidAt(Instant.now());
         invoice.preUpdate();
-
-        Invoice updatedInvoice = invoiceRepository.save(invoice);
-
-        Client invoiceClient = clientRepository.findById(updatedInvoice.getClientId())
-                .orElse(null);
-        Map<UUID, Client> clientMap = new HashMap<>();
-        if (invoiceClient != null) {
-            clientMap.put(updatedInvoice.getClientId(), invoiceClient);
-        }
-
-        return toResponseWithLineItems(updatedInvoice, clientMap);
+        return invoiceRepository.save(invoice);
     }
 
-    private InvoiceResponse toResponseWithLineItems(Invoice invoice, Map<UUID, Client> clientMap) {
-        List<InvoiceLineItem> lineItems = lineItemRepository.findByInvoiceId(invoice.getId());
+    /** Line items are batch-loaded: one query for the whole list instead of one per invoice. */
+    private List<InvoiceResponse> toResponses(List<Invoice> invoices) {
+        if (invoices.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, List<InvoiceLineItem>> itemsByInvoice = lineItemRepository
+                .findByInvoiceIdIn(invoices.stream().map(Invoice::getId).collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.groupingBy(InvoiceLineItem::getInvoiceId));
+        return invoices.stream()
+                .map(invoice -> toResponse(invoice, itemsByInvoice.getOrDefault(invoice.getId(), List.of())))
+                .collect(Collectors.toList());
+    }
 
+    InvoiceResponse toResponse(Invoice invoice, List<InvoiceLineItem> lineItems) {
         return new InvoiceResponse(
                 invoice.getId().toString(),
                 invoice.getInvoiceNumber(),
@@ -237,7 +215,7 @@ public class InvoiceService {
                 invoice.getStatus().name(),
                 invoice.getPaidAt() != null ? invoice.getPaidAt().toString() : null,
                 invoice.getNotes(),
-                invoice.getUpdatedAt().toString()
+                invoice.getUpdatedAt() != null ? invoice.getUpdatedAt().toString() : null
         );
     }
 
@@ -249,6 +227,14 @@ public class InvoiceService {
                 item.getUnitPrice(),
                 item.getAmount()
         );
+    }
+
+    private static UUID parseUuid(String value) {
+        try {
+            return UUID.fromString(value.trim());
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("clientId must be a valid UUID");
+        }
     }
 
     private void validateLineItems(List<CreateInvoiceCommand.CreateInvoiceLineItemCommand> lineItems) {
@@ -267,7 +253,7 @@ public class InvoiceService {
                 throw new IllegalArgumentException("Line item amount must be positive or zero");
             }
 
-            // Validate: amount = quantity × unitPrice (with 2 decimal rounding)
+            // Validate: amount = quantity × unitPrice (with 2 decimal rounding); mirrors the V14 trigger
             BigDecimal calculatedAmount = new BigDecimal(item.quantity())
                     .multiply(item.unitPrice())
                     .setScale(2, RoundingMode.HALF_UP);

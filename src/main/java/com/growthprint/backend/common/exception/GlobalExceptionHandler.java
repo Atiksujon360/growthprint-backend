@@ -1,5 +1,7 @@
 package com.growthprint.backend.common.exception;
 
+import com.growthprint.backend.auth.exception.AuthenticationFailedException;
+import com.growthprint.backend.auth.exception.UserNotFoundException;
 import com.growthprint.backend.client.exception.ClientNotFoundException;
 import com.growthprint.backend.common.dto.ApiErrorResponse;
 import com.growthprint.backend.crm.lead.exception.CrmLeadAlreadyExistsException;
@@ -13,21 +15,32 @@ import com.growthprint.backend.outreach.exception.InvalidOutreachStatusTransitio
 import com.growthprint.backend.outreach.exception.OutreachDraftNotFoundException;
 import com.growthprint.backend.project.exception.ProjectAlreadyExistsException;
 import com.growthprint.backend.project.exception.ProjectNotFoundException;
+import com.growthprint.backend.proposal.exception.ProposalExpiredException;
+import com.growthprint.backend.proposal.exception.ProposalNotFoundException;
 import com.growthprint.backend.support.exception.InvalidSupportRequestStatusTransitionException;
 import com.growthprint.backend.support.exception.SupportRequestNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public org.springframework.http.ResponseEntity<ApiErrorResponse> handleValidation(
@@ -129,10 +142,111 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
     }
 
+    @ExceptionHandler(ProposalNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleProposalNotFound(
+            ProposalNotFoundException exception, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(ProposalExpiredException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleProposalExpired(
+            ProposalExpiredException exception, HttpServletRequest request) {
+        return response(HttpStatus.CONFLICT, exception.getMessage(), request, Map.of());
+    }
+
+    /**
+     * Unique / foreign-key / check constraint violations (e.g. duplicate CRM lead company+email, concurrent
+     * proposal numbers). Previously a 500. The database message is logged but never returned: it contains
+     * SQL and constraint names.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException exception, HttpServletRequest request) {
+        log.warn("Data integrity violation on {} {}: {}", request.getMethod(), request.getRequestURI(),
+                exception.getMostSpecificCause().getMessage());
+        return response(HttpStatus.CONFLICT, "The request conflicts with existing data", request, Map.of());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Authentication / authorization
+    // ---------------------------------------------------------------------------------------------
+
+    @ExceptionHandler(AuthenticationFailedException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleAuthenticationFailed(
+            AuthenticationFailedException exception, HttpServletRequest request) {
+        // Always the same generic message: never reveal whether the email exists.
+        return response(HttpStatus.UNAUTHORIZED, "Invalid credentials", request, Map.of());
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleUserNotFound(
+            UserNotFoundException exception, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, "User not found", request, Map.of());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleAccessDenied(
+            AccessDeniedException exception, HttpServletRequest request) {
+        // Thrown by @PreAuthorize inside controllers; must not fall into the generic 500 handler.
+        return response(HttpStatus.FORBIDDEN, "Access denied", request, Map.of());
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleSpringAuthentication(
+            AuthenticationException exception, HttpServletRequest request) {
+        return response(HttpStatus.UNAUTHORIZED, "Authentication required", request, Map.of());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Generic request / business-rule errors
+    // ---------------------------------------------------------------------------------------------
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleTypeMismatch(
+            MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
+        // e.g. GET /api/v1/clients/not-a-uuid
+        return response(HttpStatus.BAD_REQUEST, "Invalid value for parameter '" + exception.getName() + "'",
+                request, Map.of());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleIllegalArgument(
+            IllegalArgumentException exception, HttpServletRequest request) {
+        // Services use IllegalArgumentException for invalid input (e.g. invoice line item rules).
+        return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleIllegalState(
+            IllegalStateException exception, HttpServletRequest request) {
+        // Services use IllegalStateException for invalid state transitions (e.g. "Only draft proposals ...").
+        return response(HttpStatus.CONFLICT, exception.getMessage(), request, Map.of());
+    }
+
+    /**
+     * Last-resort handler. Standard Spring MVC exceptions (404 no route, 405 wrong method, 415 media
+     * type, ...) keep their own status; anything else becomes a sanitized 500 that is logged
+     * server-side with the correlation id but never leaks internals to the client.
+     */
+    @ExceptionHandler(Exception.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleUnexpected(
+            Exception exception, HttpServletRequest request) {
+        if (exception instanceof ErrorResponse errorResponse) {
+            HttpStatus status = HttpStatus.resolve(errorResponse.getStatusCode().value());
+            if (status != null && status.is4xxClientError()) {
+                return response(status, status.getReasonPhrase(), request, Map.of());
+            }
+        }
+        log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), exception);
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", request, Map.of());
+    }
+
     private org.springframework.http.ResponseEntity<ApiErrorResponse> response(
             HttpStatus status, String message, HttpServletRequest request, Map<String, String> fieldErrors) {
-        ApiErrorResponse body = new ApiErrorResponse(Instant.now(), status.value(), status.getReasonPhrase(),
-                message, request.getRequestURI(), fieldErrors);
-        return org.springframework.http.ResponseEntity.status(status).body(body);
+        // RFC 9457-compatible body, deliberately served as application/json (see ApiErrorResponse).
+        ApiErrorResponse body = ApiErrorResponse.of(status, message, request.getRequestURI(), fieldErrors);
+        return org.springframework.http.ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
     }
 }

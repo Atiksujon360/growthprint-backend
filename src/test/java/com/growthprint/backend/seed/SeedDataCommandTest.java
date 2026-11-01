@@ -6,6 +6,7 @@ import com.growthprint.backend.auth.repository.UserRepository;
 import com.growthprint.backend.support.entity.SupportRequest;
 import com.growthprint.backend.support.repository.SupportRequestRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -13,9 +14,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Boots the full application against a real PostgreSQL database, so it only runs when
+ * DATABASE_URL (and JWT_SECRET) are exported in the environment. Without them it is skipped,
+ * the same way the Docker-based integration tests are.
+ */
 @SpringBootTest
 @ActiveProfiles("seed")
 @Transactional
+@EnabledIfEnvironmentVariable(named = "DATABASE_URL", matches = ".+",
+        disabledReason = "Requires a real PostgreSQL database (DATABASE_URL not set)")
 public class SeedDataCommandTest {
 
     @Autowired

@@ -112,7 +112,9 @@ class ClientControllerTest {
         when(clientService.update(eq(id), any())).thenReturn(response);
 
         ClientController controller = new ClientController(clientService);
-        ClientResponse result = controller.update(id, java.util.Map.of("name", "Updated Corp"));
+        // Typed body since the 2026-11-01 audit (was a raw Map that dropped "phone" and 500'd on bad types).
+        ClientResponse result = controller.update(id,
+                new com.growthprint.backend.client.dto.UpdateClientCommand("Updated Corp", null, null, null));
 
         assertThat(result.id()).isEqualTo(id);
         assertThat(result.name()).isEqualTo("Updated Corp");

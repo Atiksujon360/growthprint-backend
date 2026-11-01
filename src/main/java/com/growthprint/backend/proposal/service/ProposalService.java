@@ -6,23 +6,33 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.growthprint.backend.auth.service.AuthService;
 import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.repository.ClientRepository;
+import com.growthprint.backend.common.validation.EnumValues;
+import com.growthprint.backend.project.entity.ServiceCategory;
 import com.growthprint.backend.proposal.dto.*;
 import com.growthprint.backend.proposal.entity.Proposal;
 import com.growthprint.backend.proposal.entity.ProposalCurrency;
 import com.growthprint.backend.proposal.entity.ProposalStatus;
+import com.growthprint.backend.proposal.exception.ProposalExpiredException;
+import com.growthprint.backend.proposal.exception.ProposalNotFoundException;
 import com.growthprint.backend.proposal.repository.ProposalRepository;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Year;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
 public class ProposalService {
+
+    /** Upper bound for number allocation; collisions beyond this indicate a data problem, not bad luck. */
+    private static final int MAX_NUMBER_ATTEMPTS = 1_000;
 
     private final ProposalRepository proposalRepository;
     private final ClientRepository clientRepository;
@@ -48,14 +58,7 @@ public class ProposalService {
 
     @Transactional(readOnly = true)
     public List<ProposalResponse> findMyProposals(String userId) {
-        UUID userUuid;
-        try {
-            userUuid = UUID.fromString(userId);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid user ID format: " + userId);
-        }
-
-        UUID clientId = authService.getUserById(userUuid).getClientId();
+        UUID clientId = authService.getUserById(parseUuid(userId, "user ID")).getClientId();
         if (clientId == null) {
             throw new IllegalStateException("User is not associated with a client");
         }
@@ -66,19 +69,12 @@ public class ProposalService {
 
     @Transactional(readOnly = true)
     public ProposalResponse findById(UUID id) {
-        Proposal proposal = proposalRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Proposal not found: " + id));
-        return toResponse(proposal);
+        return toResponse(load(id));
     }
 
     @Transactional
     public ProposalResponse create(CreateProposalCommand command) {
-        UUID clientId;
-        try {
-            clientId = UUID.fromString(command.clientId());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid client ID format: " + command.clientId());
-        }
+        UUID clientId = parseUuid(command.clientId(), "client ID");
 
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Client not found: " + command.clientId()));
@@ -86,23 +82,18 @@ public class ProposalService {
         // Validate payment milestones
         validatePaymentMilestones(command.paymentMilestones(), command.totalPrice());
 
-        String proposalNumber = generateProposalNumber();
-        while (proposalRepository.existsByProposalNumber(proposalNumber)) {
-            proposalNumber = generateProposalNumber();
-        }
-
         Proposal proposal = new Proposal(
                 UUID.randomUUID(),
-                proposalNumber,
+                allocateProposalNumber(),
                 client.getId(),
                 client.getName(),
                 command.title(),
-                command.serviceCategory(),
+                serviceCategory(command.serviceCategory()),
                 command.scopeSummary(),
                 toJson(command.deliverables()),
-                toJson(command.exclusions()),
+                toJson(nullToEmpty(command.exclusions())),
                 command.totalPrice(),
-                ProposalCurrency.valueOf(command.currency()),
+                EnumValues.parse(ProposalCurrency.class, command.currency(), "currency"),
                 toJson(command.paymentMilestones()),
                 command.timelineDuration(),
                 command.validUntil(),
@@ -112,14 +103,12 @@ public class ProposalService {
                 Instant.now()
         );
 
-        Proposal saved = proposalRepository.save(proposal);
-        return toResponse(saved);
+        return toResponse(proposalRepository.save(proposal));
     }
 
     @Transactional
     public ProposalResponse update(UUID id, UpdateProposalCommand command) {
-        Proposal proposal = proposalRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Proposal not found: " + id));
+        Proposal proposal = load(id);
 
         if (proposal.getStatus() != ProposalStatus.DRAFT) {
             throw new IllegalStateException("Only draft proposals can be updated");
@@ -129,25 +118,23 @@ public class ProposalService {
         validatePaymentMilestones(command.paymentMilestones(), command.totalPrice());
 
         proposal.setTitle(command.title());
-        proposal.setServiceCategory(command.serviceCategory());
+        proposal.setServiceCategory(serviceCategory(command.serviceCategory()));
         proposal.setScopeSummary(command.scopeSummary());
         proposal.setDeliverables(toJson(command.deliverables()));
-        proposal.setExclusions(toJson(command.exclusions()));
+        proposal.setExclusions(toJson(nullToEmpty(command.exclusions())));
         proposal.setTotalPrice(command.totalPrice());
-        proposal.setCurrency(ProposalCurrency.valueOf(command.currency()));
+        proposal.setCurrency(EnumValues.parse(ProposalCurrency.class, command.currency(), "currency"));
         proposal.setPaymentMilestones(toJson(command.paymentMilestones()));
         proposal.setTimelineDuration(command.timelineDuration());
         proposal.setValidUntil(command.validUntil());
         proposal.setNotes(command.notes());
 
-        Proposal saved = proposalRepository.save(proposal);
-        return toResponse(saved);
+        return toResponse(proposalRepository.save(proposal));
     }
 
     @Transactional
     public ProposalResponse publish(UUID id, PublishProposalCommand command) {
-        Proposal proposal = proposalRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Proposal not found: " + id));
+        Proposal proposal = load(id);
 
         if (proposal.getStatus() != ProposalStatus.DRAFT) {
             throw new IllegalStateException("Only draft proposals can be published");
@@ -156,39 +143,38 @@ public class ProposalService {
         proposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
         proposal.setValidUntil(command.validUntil());
 
-        Proposal saved = proposalRepository.save(proposal);
-        return toResponse(saved);
+        return toResponse(proposalRepository.save(proposal));
     }
 
-    @Transactional
+    /**
+     * Client accepts or declines a proposal sent for review.
+     * <ul>
+     *     <li>Unknown proposal: 404. Another client's proposal: 403 (checked before any state is revealed).</li>
+     *     <li>Past validUntil: the proposal is persisted as EXPIRED and a 409 is returned. The EXPIRED update
+     *     must survive the exception, hence {@code noRollbackFor} (previously it was silently rolled back).</li>
+     * </ul>
+     */
+    @Transactional(noRollbackFor = ProposalExpiredException.class)
     public ProposalResponse recordDecision(UUID id, ProposalDecisionCommand command, String userId) {
-        Proposal proposal = proposalRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Proposal not found: " + id));
+        Proposal proposal = load(id);
 
-        UUID userUuid;
-        try {
-            userUuid = UUID.fromString(userId);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid user ID format: " + userId);
-        }
-
-        com.growthprint.backend.auth.entity.User user = authService.getUserById(userUuid);
+        com.growthprint.backend.auth.entity.User user = authService.getUserById(parseUuid(userId, "user ID"));
         UUID clientId = user.getClientId();
         if (clientId == null || !clientId.equals(proposal.getClientId())) {
-            throw new IllegalStateException("User is not authorized to decide on this proposal");
+            throw new AccessDeniedException("User is not authorized to decide on this proposal");
         }
 
         if (proposal.getStatus() != ProposalStatus.SENT_FOR_REVIEW) {
             throw new IllegalStateException("Proposal is not awaiting client decision");
         }
 
-        if (LocalDate.now().isAfter(proposal.getValidUntil())) {
+        if (LocalDate.now(ZoneOffset.UTC).isAfter(proposal.getValidUntil())) {
             proposal.setStatus(ProposalStatus.EXPIRED);
             proposalRepository.save(proposal);
-            throw new IllegalStateException("Proposal has expired");
+            throw new ProposalExpiredException();
         }
 
-        String decision = command.decision().toUpperCase();
+        String decision = command.decision().trim().toUpperCase(Locale.ROOT);
         if ("ACCEPT".equals(decision)) {
             proposal.setStatus(ProposalStatus.ACCEPTED);
             proposal.setAcceptedAt(Instant.now());
@@ -198,11 +184,14 @@ public class ProposalService {
             proposal.setDeclinedAt(Instant.now());
             proposal.setDeclinedBy(user.getEmail());
         } else {
-            throw new IllegalArgumentException("Invalid decision: " + decision);
+            throw new IllegalArgumentException("Invalid decision. Allowed values: ACCEPT, DECLINE");
         }
 
-        Proposal saved = proposalRepository.save(proposal);
-        return toResponse(saved);
+        return toResponse(proposalRepository.save(proposal));
+    }
+
+    private Proposal load(UUID id) {
+        return proposalRepository.findById(id).orElseThrow(() -> new ProposalNotFoundException(id));
     }
 
     private void validatePaymentMilestones(List<CreateProposalCommand.PaymentMilestone> milestones, BigDecimal totalPrice) {
@@ -239,19 +228,36 @@ public class ProposalService {
         }
     }
 
+    /** proposals.service_category has a CHECK constraint; validate here for a clean 400 instead of a 500. */
+    private static String serviceCategory(String value) {
+        return EnumValues.parse(ServiceCategory.class, value, "serviceCategory").name();
+    }
+
+    private static <T> List<T> nullToEmpty(List<T> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private static UUID parseUuid(String value, String fieldName) {
+        try {
+            return UUID.fromString(value.trim());
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Invalid " + fieldName + " format");
+        }
+    }
+
     private String toJson(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize to JSON", e);
+            throw new IllegalStateException("Failed to serialize proposal data", e);
         }
     }
 
     private <T> T fromJson(String json, TypeReference<T> typeRef) {
         try {
-            return objectMapper.readValue(json, typeRef);
+            return json == null ? null : objectMapper.readValue(json, typeRef);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to deserialize from JSON", e);
+            throw new IllegalStateException("Failed to read stored proposal data", e);
         }
     }
 
@@ -277,14 +283,25 @@ public class ProposalService {
                 proposal.getDeclinedAt() != null ? proposal.getDeclinedAt().toString() : null,
                 proposal.getDeclinedBy(),
                 proposal.getNotes(),
-                proposal.getCreatedAt().toString(),
-                proposal.getUpdatedAt().toString()
+                proposal.getCreatedAt() != null ? proposal.getCreatedAt().toString() : null,
+                proposal.getUpdatedAt() != null ? proposal.getUpdatedAt().toString() : null
         );
     }
 
-    private String generateProposalNumber() {
-        int year = java.time.Year.now().getValue();
-        long count = proposalRepository.count() + 1;
-        return String.format("GP-PROP-%d-%04d", year, count);
+    /**
+     * Keeps the existing GP-PROP-{year}-{nnnn} format. Starts at count()+1 and moves forward past taken
+     * numbers (the previous loop regenerated the same number forever). Concurrent creates can still race;
+     * the UNIQUE constraint on proposal_number then turns the loser into a 409 via GlobalExceptionHandler.
+     */
+    private String allocateProposalNumber() {
+        int year = Year.now(ZoneOffset.UTC).getValue();
+        long next = proposalRepository.count() + 1;
+        for (int attempt = 0; attempt < MAX_NUMBER_ATTEMPTS; attempt++, next++) {
+            String candidate = String.format(Locale.ROOT, "GP-PROP-%d-%04d", year, next);
+            if (!proposalRepository.existsByProposalNumber(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Could not allocate a proposal number");
     }
 }

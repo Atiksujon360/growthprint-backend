@@ -147,4 +147,42 @@ class JwtTokenProviderTest {
 
         assertThrows(IllegalStateException.class, () -> new JwtTokenProvider(jwtProperties));
     }
+
+    @Test
+    void constructor_PreviouslyHardcodedDefaultSecret_ThrowsException() {
+        jwtProperties.setSecret(JwtTokenProvider.LEAKED_DEFAULT_SECRET);
+
+        assertThrows(IllegalStateException.class, () -> new JwtTokenProvider(jwtProperties));
+    }
+
+    @Test
+    void validateToken_TokenFromDifferentIssuer_ReturnsFalse() {
+        JwtProperties otherIssuer = new JwtProperties();
+        otherIssuer.setSecret(jwtProperties.getSecret());
+        otherIssuer.setExpiration(Duration.ofHours(1));
+        otherIssuer.setIssuer("some-other-service");
+        String foreignToken = new JwtTokenProvider(otherIssuer).generateToken(sampleUser(UserRole.ADMIN));
+
+        assertFalse(jwtTokenProvider.validateToken(foreignToken));
+    }
+
+    @Test
+    void validateToken_TamperedSignature_ReturnsFalse() {
+        String token = jwtTokenProvider.generateToken(sampleUser(UserRole.CLIENT));
+        String tampered = token.substring(0, token.length() - 2) + (token.endsWith("A") ? "BB" : "AA");
+
+        assertFalse(jwtTokenProvider.validateToken(tampered));
+        assertTrue(jwtTokenProvider.parseValidClaims(tampered).isEmpty());
+    }
+
+    @Test
+    void parseValidClaims_NullOrBlank_ReturnsEmpty() {
+        assertTrue(jwtTokenProvider.parseValidClaims(null).isEmpty());
+        assertTrue(jwtTokenProvider.parseValidClaims("  ").isEmpty());
+    }
+
+    private static User sampleUser(UserRole role) {
+        return new User(UUID.randomUUID(), "u@example.com", "u@example.com", "hash", role,
+                AccountStatus.ACTIVE, null, Instant.now(), Instant.now());
+    }
 }

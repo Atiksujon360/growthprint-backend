@@ -300,7 +300,7 @@ class SupportRequestServiceTest {
         testEstimate.setCreatedAt(Instant.now());
 
         when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
-        when(supportEstimateRepository.findByRequestId(testRequest.getId())).thenReturn(Optional.of(testEstimate));
+        when(supportEstimateRepository.findFirstByRequestIdOrderByCreatedAtDesc(testRequest.getId())).thenReturn(Optional.of(testEstimate));
         when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
         when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
         when(supportRequestRepository.save(any())).thenReturn(testRequest);
@@ -350,9 +350,10 @@ class SupportRequestServiceTest {
         User testUser = mock(User.class);
         when(testUser.getId()).thenReturn(userId);
         when(testUser.getClientId()).thenReturn(testClientId);
+        when(testUser.getEmail()).thenReturn("signed-in.client@example.com");
 
         when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
-        when(supportEstimateRepository.findByRequestId(testRequest.getId())).thenReturn(Optional.of(testEstimate));
+        when(supportEstimateRepository.findFirstByRequestIdOrderByCreatedAtDesc(testRequest.getId())).thenReturn(Optional.of(testEstimate));
         when(authService.getUserById(userId)).thenReturn(testUser);
         when(clientRepository.findById(testClientId)).thenReturn(Optional.of(testClient));
         when(projectRepository.findById(testProjectId)).thenReturn(Optional.of(testProject));
@@ -363,7 +364,8 @@ class SupportRequestServiceTest {
 
         assertEquals(SupportRequestStatus.READY_TO_START, testRequest.getStatus());
         assertEquals(SupportEstimateStatus.ACCEPTED, testEstimate.getStatus());
-        assertEquals("client@example.com", testEstimate.getAcceptedBy());
+        // Audit 2026-11-01: the authenticated user is recorded, not the client-supplied approvedBy name.
+        assertEquals("signed-in.client@example.com", testEstimate.getAcceptedBy());
         assertNotNull(testEstimate.getAcceptedAt());
         verify(supportRequestRepository).save(testRequest);
         verify(supportEstimateRepository).save(testEstimate);
@@ -401,7 +403,8 @@ class SupportRequestServiceTest {
         when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
         when(authService.getUserById(userId)).thenReturn(testUser);
 
-        assertThrows(IllegalArgumentException.class,
+        // Audit 2026-11-01: another client's request is reported as not found (404) so ids cannot be probed.
+        assertThrows(SupportRequestNotFoundException.class,
                 () -> supportRequestService.approveMyEstimate(testRequest.getId(), command, userId.toString()));
     }
 

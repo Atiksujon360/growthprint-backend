@@ -244,7 +244,9 @@ class InvoiceServiceTest {
         when(invoiceRepository.existsByInvoiceNumber(any())).thenReturn(false);
         when(clientRepository.findById(any())).thenReturn(Optional.empty());
 
-        assertThrows(InvoiceNotFoundException.class, () -> invoiceService.create(command));
+        // Audit 2026-11-01: unknown client is a ClientNotFoundException (was a misleading InvoiceNotFoundException).
+        assertThrows(com.growthprint.backend.client.exception.ClientNotFoundException.class,
+                () -> invoiceService.create(command));
     }
 
     @Test

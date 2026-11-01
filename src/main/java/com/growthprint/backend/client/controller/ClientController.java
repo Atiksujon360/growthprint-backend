@@ -1,6 +1,7 @@
 package com.growthprint.backend.client.controller;
 
 import com.growthprint.backend.client.dto.ClientResponse;
+import com.growthprint.backend.client.dto.UpdateClientCommand;
 import com.growthprint.backend.client.service.ClientService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -37,9 +38,12 @@ public class ClientController {
     }
 
     @PatchMapping("/{id}")
-    @Operation(summary = "Update client", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "Update client (partial)", security = @SecurityRequirement(name = "bearerAuth"),
+            description = "Updatable fields: name, contactEmail, phone (alias: contactPhone), notes. "
+                    + "Omitted fields are unchanged; an empty phone clears it.")
     @PreAuthorize("hasRole('ADMIN')")
-    public ClientResponse update(@PathVariable UUID id, @RequestBody java.util.Map<String, Object> updates) {
+    public ClientResponse update(@PathVariable UUID id,
+                                 @jakarta.validation.Valid @RequestBody UpdateClientCommand updates) {
         return clientService.update(id, updates);
     }
 }

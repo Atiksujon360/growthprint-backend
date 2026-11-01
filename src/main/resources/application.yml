@@ -20,11 +20,13 @@ spring:
     locations: classpath:db/migration
 
 springdoc:
+  # API docs / Swagger UI stay on by default for backwards compatibility.
+  # Set SPRINGDOC_ENABLED=false in staging/production (see DEPLOYMENT.md).
   api-docs:
-    enabled: true
+    enabled: ${SPRINGDOC_ENABLED:true}
     path: /v3/api-docs
   swagger-ui:
-    enabled: true
+    enabled: ${SPRINGDOC_ENABLED:true}
     path: /swagger-ui.html
   openapi:
     info:
@@ -43,6 +45,13 @@ management:
 
 server:
   port: 8090
+  # Honour X-Forwarded-* headers only from trusted internal proxies (Tomcat RemoteIpValve
+  # defaults: 10/8, 172.16/12, 192.168/16, 127/8, ...). Needed behind Render's load balancer so
+  # per-client rate limiting sees the real client IP and HTTPS is detected (HSTS).
+  forward-headers-strategy: native
+  error:
+    include-stacktrace: never
+    include-message: never
 
 app:
   admin-endpoints:
@@ -51,9 +60,11 @@ app:
 
   security:
     jwt:
-      # JWT signing secret - MUST be set in production via environment variable
+      # JWT signing secret - REQUIRED in every environment via the JWT_SECRET environment variable.
+      # There is intentionally no fallback: a publicly known default would let anyone forge ADMIN tokens.
+      # The application refuses to start if it is missing or shorter than 32 characters.
       # Generate a secure random key: openssl rand -base64 64
-      secret: "${JWT_SECRET:default-dev-secret-key-for-growthprint-backend-min-32-chars}"
+      secret: "${JWT_SECRET:}"
       # Token expiration time (default: 1 hour)
       expiration: 1h
       issuer: growthprint-backend
@@ -66,7 +77,11 @@ app:
 
   rate-limit:
     public-inquiries:
-      # Maximum requests per time window
+      # Maximum requests per time window (per client IP)
       max-requests: 10
       # Time window for rate limiting
+      window: 1m
+    login:
+      # Brute-force protection for POST /api/v1/auth/login (per client IP)
+      max-requests: 10
       window: 1m

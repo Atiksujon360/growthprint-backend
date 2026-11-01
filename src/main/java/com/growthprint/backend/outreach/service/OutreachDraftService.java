@@ -59,6 +59,11 @@ public class OutreachDraftService {
                     "Cannot approve a rejected draft");
         }
 
+        // Idempotent: re-approving must not rewrite the original approval timestamp.
+        if (draft.getStatus() == OutreachDraftStatus.APPROVED) {
+            return toResponse(draft);
+        }
+
         draft.setStatus(OutreachDraftStatus.APPROVED);
         draft.setApprovedByFounder(true);
         draft.setApprovedAt(Instant.now());

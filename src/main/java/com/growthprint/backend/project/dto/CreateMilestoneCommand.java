@@ -9,6 +9,7 @@ import java.time.LocalDate;
 
 public record CreateMilestoneCommand(
         @NotBlank(message = "Title is required")
+        @jakarta.validation.constraints.Size(max = 200, message = "Title must not exceed 200 characters")
         String title,
 
         @NotNull(message = "Due date is required")

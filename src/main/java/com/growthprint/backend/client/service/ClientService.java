@@ -1,6 +1,7 @@
 package com.growthprint.backend.client.service;
 
 import com.growthprint.backend.client.dto.ClientResponse;
+import com.growthprint.backend.client.dto.UpdateClientCommand;
 import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.exception.ClientNotFoundException;
 import com.growthprint.backend.client.repository.ClientRepository;
@@ -34,15 +35,15 @@ public class ClientService {
     }
 
     @Transactional
-    public ClientResponse update(UUID id, java.util.Map<String, Object> updates) {
+    public ClientResponse update(UUID id, UpdateClientCommand updates) {
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new ClientNotFoundException(id));
 
-        // Apply allowed updates using constructor pattern
-        String name = updates.containsKey("name") ? (String) updates.get("name") : client.getName();
-        String contactEmail = updates.containsKey("contactEmail") ? (String) updates.get("contactEmail") : client.getContactEmail();
-        String phone = updates.containsKey("contactPhone") ? (String) updates.get("contactPhone") : client.getPhone();
-        String notes = updates.containsKey("notes") ? (String) updates.get("notes") : client.getNotes();
+        // Partial update: null/omitted fields keep their current value (validated by @Valid in the controller).
+        String name = updates.name() != null ? updates.name().trim() : client.getName();
+        String contactEmail = updates.contactEmail() != null ? updates.contactEmail().trim() : client.getContactEmail();
+        String phone = updates.phone() != null ? blankToNull(updates.phone()) : client.getPhone();
+        String notes = updates.notes() != null ? updates.notes() : client.getNotes();
 
         Client updatedClient = new Client(
                 client.getId(),
@@ -63,5 +64,10 @@ public class ClientService {
 
         Client savedClient = clientRepository.save(updatedClient);
         return ClientResponse.from(savedClient);
+    }
+
+    private static String blankToNull(String value) {
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
