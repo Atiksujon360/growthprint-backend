@@ -1,5 +1,7 @@
 package com.growthprint.backend.security;
 
+import com.growthprint.backend.ai.settings.AiSettingsService;
+import com.growthprint.backend.ai.triage.SupportTriageService;
 import com.growthprint.backend.auth.entity.AccountStatus;
 import com.growthprint.backend.auth.entity.User;
 import com.growthprint.backend.auth.entity.UserRole;
@@ -11,6 +13,7 @@ import com.growthprint.backend.config.LoginRateLimitConfig;
 import com.growthprint.backend.config.RateLimitConfig;
 import com.growthprint.backend.config.SecurityConfig;
 import com.growthprint.backend.crm.lead.service.CrmLeadService;
+import com.growthprint.backend.invoice.pdf.InvoicePdfService;
 import com.growthprint.backend.invoice.service.InvoicePaymentReportService;
 import com.growthprint.backend.invoice.service.InvoiceService;
 import com.growthprint.backend.lead.service.LeadService;
@@ -77,10 +80,13 @@ class RoleMatrixSecurityTest {
     @MockitoBean private LeadService leadService;
     @MockitoBean private InvoiceService invoiceService;
     @MockitoBean private InvoicePaymentReportService invoicePaymentReportService;
+    @MockitoBean private InvoicePdfService invoicePdfService;
     @MockitoBean private OutreachDraftService outreachDraftService;
     @MockitoBean private ProjectService projectService;
     @MockitoBean private ProposalService proposalService;
     @MockitoBean private SupportRequestService supportRequestService;
+    @MockitoBean private AiSettingsService aiSettingsService;
+    @MockitoBean private SupportTriageService supportTriageService;
 
     static Stream<Arguments> routes() {
         return Stream.of(
@@ -133,6 +139,9 @@ class RoleMatrixSecurityTest {
                 route("GET", "/api/v1/invoices/" + ID + "/payment-reports", Access.ADMIN),
                 route("POST", "/api/v1/invoices/payment-reports/" + ID + "/verify", Access.ADMIN),
                 route("POST", "/api/v1/invoices/payment-reports/" + ID + "/reject", Access.ADMIN),
+                // Invoice PDFs (generated on demand)
+                route("GET", "/api/v1/invoices/" + ID + "/pdf", Access.ADMIN),
+                route("GET", "/api/v1/invoices/my/" + ID + "/pdf", Access.CLIENT),
                 // Proposals
                 route("GET", "/api/v1/proposals", Access.ADMIN),
                 route("GET", "/api/v1/proposals/my", Access.CLIENT),
@@ -145,7 +154,16 @@ class RoleMatrixSecurityTest {
                 route("GET", "/api/v1/outreach/drafts", Access.ADMIN),
                 route("GET", "/api/v1/outreach/drafts/" + ID, Access.ADMIN),
                 route("POST", "/api/v1/outreach/drafts/" + ID + "/approve", Access.ADMIN),
-                route("POST", "/api/v1/outreach/drafts/" + ID + "/send", Access.ADMIN)
+                route("POST", "/api/v1/outreach/drafts/" + ID + "/send", Access.ADMIN),
+                // AI provider settings and AI support triage (admin only)
+                route("GET", "/api/v1/admin/ai/providers", Access.ADMIN),
+                route("GET", "/api/v1/admin/ai/settings", Access.ADMIN),
+                route("PUT", "/api/v1/admin/ai/settings", Access.ADMIN),
+                route("PUT", "/api/v1/admin/ai/settings/api-key", Access.ADMIN),
+                route("DELETE", "/api/v1/admin/ai/settings/api-key", Access.ADMIN),
+                route("POST", "/api/v1/admin/ai/settings/test", Access.ADMIN),
+                route("GET", "/api/v1/admin/ai/models", Access.ADMIN),
+                route("POST", "/api/v1/support-requests/" + ID + "/ai/triage", Access.ADMIN)
         );
     }
 

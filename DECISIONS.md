@@ -516,6 +516,74 @@ Use GlobalExceptionHandler with @RestControllerAdvice.
 
 ---
 
+## Decision 15: Invoice PDFs with OpenPDF, generated on demand (D4)
+
+**Date:** 2026-11-01
+**Status:** Accepted
+**Context:**
+- Admins and clients need a professional, downloadable invoice document.
+- The backend runs on Render, whose service filesystem is ephemeral (files are lost on every deploy/restart).
+- Invoice state changes after issue (payment reports verified, PAID, VOID), so a stored file can go stale.
+
+**Alternatives Considered:**
+1. OpenPDF (`com.github.librepdf:openpdf`) - Chosen (approved by the product owner)
+2. iText 7+ (AGPL / commercial licence - rejected)
+3. Apache PDFBox (low-level drawing API, more layout code)
+4. HTML-to-PDF (Flying Saucer / OpenHTMLtoPDF) - extra templating layer
+5. Generate once and store in object storage - needs a storage service and invalidation
+
+**Decision:**
+- Use **OpenPDF 3.0.5** (latest release on Maven Central as of 2026-11-01; requires Java 21; packages `org.openpdf.*`).
+  **Licence: dual LGPL 2.1 / MPL 2.0** - used unmodified as a library dependency, which both licences permit.
+- Render PDFs **on demand** in `invoice/pdf` (`InvoicePdfRenderer`, `InvoicePdfService`, `InvoicePdfController`);
+  **never store them**. Endpoints: `GET /api/v1/invoices/{id}/pdf` (ADMIN) and
+  `GET /api/v1/invoices/my/{id}/pdf` (CLIENT, own client only - other invoices return 404).
+  `Content-Disposition: attachment` by default, `?disposition=inline` for preview; `Cache-Control: no-store`.
+- The PDF shows the invoice's stored subtotal / tax / total exactly (never recalculated). Amount paid = sum of
+  VERIFIED payment reports (PAID invoices show the full total as paid, since an admin may reconcile without a
+  report); balance due = total - paid, never negative, 0 for PAID and VOID.
+- Seller details and payment instructions come only from `app.company.*` (env `COMPANY_*`); unconfigured blocks
+  are omitted. No bank, tax or legal details are hard-coded.
+
+**Rationale:**
+- OpenPDF has a high-level table API (repeating header rows, wrapping cells, keep-together) that fits invoices.
+- On-demand generation is cheap (~tens of ms), always reflects the current invoice state and needs no storage.
+
+**Consequences:**
+- Positive: No storage, no stale documents, works on Render's ephemeral filesystem.
+- Positive: Permissive-enough licence for a closed-source SaaS (unlike AGPL iText).
+- Negative: Each download costs a render; acceptable at current volume (add caching only if it becomes hot).
+- Negative: A re-downloaded PDF reflects the current state, not a frozen copy of what was originally sent.
+- Negative: Standard PDF fonts (Helvetica, WinAnsi) cover Western European text and EUR/GBP/USD symbols; client
+  names in other scripts would need an embedded Unicode font.
+
+---
+
+## Decision 16: One estimate per support request; re-classifying replaces it
+
+**Date:** 2026-11-01 (confirmed by the founder)
+**Status:** Accepted
+
+**Context:** Re-classifying a support request after an estimate existed allowed a second estimate, and the
+single-estimate read then failed for that request and for every list that included it.
+
+**Decision:** Migration `V16__add_unique_constraint_support_estimates_request_id.sql` makes
+`support_estimates.request_id` UNIQUE. Re-classifying is allowed in any status; it deletes the existing estimate and
+resets the request to `ESTIMATE_PENDING` (or `READY_TO_START` for included support).
+
+**Alternative considered:** reject re-classification once an estimate exists (no deletion, no unique index). Not chosen.
+
+**Consequences:**
+- Positive: at most one estimate per request, enforced by the database.
+- Negative: re-classifying deletes the estimate even if the client already approved it, so its `accepted_at` /
+  `accepted_by` record is lost; a COMPLETED request can be re-opened by re-classifying. Admins should treat
+  re-classification of approved or completed requests with care.
+- Deployment risk: V16 fails if any request already has more than one estimate. Before migrating a database, run
+  `SELECT request_id, COUNT(*) FROM support_estimates GROUP BY request_id HAVING COUNT(*) > 1;` and resolve any rows.
+- AI/user-management migrations are numbered V17 (users and team access) and V19 (AI settings) as a result.
+
+---
+
 ## Future Decisions
 
 ### Pending Decision: Caching Strategy

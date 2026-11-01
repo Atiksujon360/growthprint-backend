@@ -125,6 +125,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/projects/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/outreach/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/proposals/**").hasRole("ADMIN")
+                        // AI provider settings (keys, models, limits) — admin only
+                        .requestMatchers("/api/v1/admin/ai/**").hasRole("ADMIN")
 
                         // Development-only seed endpoint - requires ADMIN role and dev profile
                         // Note: Only active when spring.profiles.active includes "dev" or "development"

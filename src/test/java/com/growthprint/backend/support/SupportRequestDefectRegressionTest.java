@@ -124,30 +124,24 @@ class SupportRequestDefectRegressionTest {
         assertThat(references).hasSize(count);
     }
 
-    // ---- H2: re-classification creating a second estimate ------------------------------------
+    // ---- H2: re-classification must never leave two estimates on one request ------------------
+    // Decision 2026-11-01 (user): keep the V16 approach — re-classifying is allowed in any status and
+    // removes the existing estimate (support_estimates.request_id is UNIQUE since V16). This replaces the
+    // earlier "reject re-classification" guard; this test pins the kept behaviour.
 
     @Test
-    void classifyIsRejectedOnceAnEstimateIsAwaitingClientApproval() throws Exception {
+    void reclassifyingRemovesTheExistingEstimateSoAtMostOneCanExist() throws Exception {
         SupportRequest request = existingRequest(SupportRequestStatus.AWAITING_CLIENT_APPROVAL);
+        SupportEstimate existing = pendingEstimate(request.getId());
+        when(estimateRepository.findByRequestId(request.getId())).thenReturn(Optional.of(existing));
 
         mvc.perform(post("/api/v1/support-requests/{id}/classify", request.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"category\":\"PAID_AD_HOC_SUPPORT\",\"adminNotes\":\"again\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
 
-        assertThat(request.getStatus()).isEqualTo(SupportRequestStatus.AWAITING_CLIENT_APPROVAL);
-    }
-
-    @Test
-    void classifyIsRejectedForCompletedRequests() throws Exception {
-        SupportRequest request = existingRequest(SupportRequestStatus.COMPLETED);
-
-        mvc.perform(post("/api/v1/support-requests/{id}/classify", request.getId())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"category\":\"INCLUDED_SUPPORT\"}"))
-                .andExpect(status().isBadRequest());
-
-        assertThat(request.getStatus()).isEqualTo(SupportRequestStatus.COMPLETED);
+        verify(estimateRepository).delete(existing);
+        assertThat(request.getStatus()).isEqualTo(SupportRequestStatus.ESTIMATE_PENDING);
     }
 
     // ---- H3: missing @Valid, enum parsing, spoofable approvedBy -------------------------------

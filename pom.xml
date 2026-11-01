@@ -27,11 +27,13 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>17</java.version>
+		<java.version>21</java.version>
 		<testcontainers.version>1.20.4</testcontainers.version>
 		<springdoc.version>3.1.1</springdoc.version>
 		<spring-dotenv.version>5.1.0</spring-dotenv.version>
 		<jjwt.version>0.12.6</jjwt.version>
+		<!-- Invoice PDFs (Decision D4). OpenPDF is dual-licensed LGPL-2.1 / MPL-2.0. -->
+		<openpdf.version>3.0.5</openpdf.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -99,6 +101,13 @@
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
+		</dependency>
+
+		<!-- Invoice PDF rendering (Decision D4); dual-licensed LGPL-2.1 / MPL-2.0 -->
+		<dependency>
+			<groupId>com.github.librepdf</groupId>
+			<artifactId>openpdf</artifactId>
+			<version>${openpdf.version}</version>
 		</dependency>
 
 		<dependency>

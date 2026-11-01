@@ -223,6 +223,28 @@ class SupportRequestServiceTest {
     }
 
     @Test
+    void classify_DeletesExistingEstimateWhenReClassifying() {
+        testRequest.setStatus(SupportRequestStatus.ESTIMATE_PENDING);
+        ClassifyRequestCommand command = new ClassifyRequestCommand("INCLUDED_SUPPORT", "Re-classified notes");
+
+        SupportEstimate existingEstimate = new SupportEstimate();
+        existingEstimate.setId(UUID.randomUUID());
+        existingEstimate.setRequestId(testRequest.getId());
+
+        when(supportRequestRepository.findById(testRequest.getId())).thenReturn(Optional.of(testRequest));
+        when(supportEstimateRepository.findByRequestId(testRequest.getId())).thenReturn(Optional.of(existingEstimate));
+        when(clientRepository.findById(testClient.getId())).thenReturn(Optional.of(testClient));
+        when(projectRepository.findById(testProject.getId())).thenReturn(Optional.of(testProject));
+        when(supportRequestRepository.save(any())).thenReturn(testRequest);
+
+        supportRequestService.classify(testRequest.getId(), command);
+
+        assertEquals(SupportRequestStatus.READY_TO_START, testRequest.getStatus());
+        verify(supportEstimateRepository).delete(existingEstimate);
+        verify(supportRequestRepository).save(testRequest);
+    }
+
+    @Test
     void attachEstimate_UpdatesStatusToAwaitingApproval() {
         testRequest.setStatus(SupportRequestStatus.ESTIMATE_PENDING);
         AttachEstimateCommand command = new AttachEstimateCommand(
