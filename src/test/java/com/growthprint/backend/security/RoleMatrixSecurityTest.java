@@ -3,10 +3,16 @@ package com.growthprint.backend.security;
 import com.growthprint.backend.ai.settings.AiSettingsService;
 import com.growthprint.backend.ai.triage.SupportTriageService;
 import com.growthprint.backend.auth.entity.AccountStatus;
+import com.growthprint.backend.auth.entity.TeamModule;
 import com.growthprint.backend.auth.entity.User;
 import com.growthprint.backend.auth.entity.UserRole;
+import com.growthprint.backend.auth.service.AccountService;
 import com.growthprint.backend.auth.service.AuthService;
+import com.growthprint.backend.auth.service.InvitationService;
+import com.growthprint.backend.auth.service.LoginThrottle;
+import com.growthprint.backend.auth.service.PasswordRecoveryService;
 import com.growthprint.backend.client.service.ClientService;
+import com.growthprint.backend.config.AccountRecoveryRateLimitConfig;
 import com.growthprint.backend.config.InMemoryRateLimiter;
 import com.growthprint.backend.config.JwtProperties;
 import com.growthprint.backend.config.LoginRateLimitConfig;
@@ -21,6 +27,9 @@ import com.growthprint.backend.outreach.service.OutreachDraftService;
 import com.growthprint.backend.project.service.ProjectService;
 import com.growthprint.backend.proposal.service.ProposalService;
 import com.growthprint.backend.support.service.SupportRequestService;
+import com.growthprint.backend.testsupport.SessionStubs;
+import com.growthprint.backend.useradmin.service.UserAdministrationService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -36,6 +45,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.time.Instant;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -53,14 +64,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @WebMvcTest
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtTokenProvider.class, JwtProperties.class,
         JwtAuthenticationEntryPoint.class, JwtAccessDeniedHandler.class,
-        InMemoryRateLimiter.class, RateLimitConfig.class, LoginRateLimitConfig.class})
+        InMemoryRateLimiter.class, RateLimitConfig.class, LoginRateLimitConfig.class,
+        AccountRecoveryRateLimitConfig.class})
 @TestPropertySource(properties = {
         // Never depend on .env: fixed test-only secret and issuer.
         "app.security.jwt.secret=role-matrix-test-secret-0123456789-abcdefghijklmnopqrstuvwxyz",
         "app.security.jwt.issuer=growthprint-backend",
         "app.cors.allowed-origins=http://localhost:3000",
         "app.rate-limit.login.max-requests=10000",
-        "app.rate-limit.public-inquiries.max-requests=10000"
+        "app.rate-limit.public-inquiries.max-requests=10000",
+        "app.rate-limit.account-recovery.max-requests=10000"
 })
 class RoleMatrixSecurityTest {
 
@@ -87,6 +100,20 @@ class RoleMatrixSecurityTest {
     @MockitoBean private SupportRequestService supportRequestService;
     @MockitoBean private AiSettingsService aiSettingsService;
     @MockitoBean private SupportTriageService supportTriageService;
+    @MockitoBean private AccountService accountService;
+    @MockitoBean private LoginThrottle loginThrottle;
+    @MockitoBean private PasswordRecoveryService passwordRecoveryService;
+    @MockitoBean private InvitationService invitationService;
+    @MockitoBean private UserAdministrationService userAdministrationService;
+    @MockitoBean private AccountSessionService accountSessionService;
+
+    /** Modules granted to the TEAM_MEMBER token in the current test. */
+    private Set<TeamModule> teamModules = EnumSet.noneOf(TeamModule.class);
+
+    @BeforeEach
+    void stubSessions() {
+        SessionStubs.acceptAllTokens(accountSessionService, () -> teamModules);
+    }
 
     static Stream<Arguments> routes() {
         return Stream.of(
@@ -96,7 +123,28 @@ class RoleMatrixSecurityTest {
                 route("POST", "/api/v1/public/inquiries", Access.PUBLIC),
                 route("GET", "/actuator/health", Access.PUBLIC),
                 // Any authenticated user
+                route("GET", "/api/v1/auth/password/policy", Access.PUBLIC),
+                route("POST", "/api/v1/auth/password/forgot", Access.PUBLIC),
+                route("POST", "/api/v1/auth/password/reset/verify", Access.PUBLIC),
+                route("POST", "/api/v1/auth/password/reset", Access.PUBLIC),
+                route("POST", "/api/v1/auth/invitations/verify", Access.PUBLIC),
+                route("POST", "/api/v1/auth/invitations/accept", Access.PUBLIC),
                 route("GET", "/api/v1/auth/me", Access.AUTHENTICATED),
+                // Self-service account settings (always the caller's own account)
+                route("GET", "/api/v1/account/profile", Access.AUTHENTICATED),
+                route("PATCH", "/api/v1/account/profile", Access.AUTHENTICATED),
+                route("POST", "/api/v1/account/password", Access.AUTHENTICATED),
+                route("POST", "/api/v1/account/sessions/revoke", Access.AUTHENTICATED),
+                // User / staff / permission management (ADMIN only, never grantable)
+                route("GET", "/api/v1/admin/users", Access.ADMIN),
+                route("POST", "/api/v1/admin/users", Access.ADMIN),
+                route("GET", "/api/v1/admin/users/" + ID, Access.ADMIN),
+                route("PATCH", "/api/v1/admin/users/" + ID + "/status", Access.ADMIN),
+                route("PATCH", "/api/v1/admin/users/" + ID + "/role", Access.ADMIN),
+                route("PUT", "/api/v1/admin/users/" + ID + "/permissions", Access.ADMIN),
+                route("POST", "/api/v1/admin/users/" + ID + "/invitation", Access.ADMIN),
+                route("POST", "/api/v1/admin/users/" + ID + "/password-reset-link", Access.ADMIN),
+                route("GET", "/api/v1/admin/security/overview", Access.ADMIN),
                 // Clients
                 route("GET", "/api/v1/clients", Access.ADMIN),
                 route("GET", "/api/v1/clients/" + ID, Access.ADMIN),
@@ -198,6 +246,81 @@ class RoleMatrixSecurityTest {
         } else {
             assertThat(status).as("ADMIN should reach %s %s", method, path).isNotIn(401, 403);
         }
+    }
+
+    /**
+     * Which module a TEAM_MEMBER needs for an ADMIN route; null = never grantable (finance, AI, user
+     * management). This is the documented staff policy (SECURITY.md), written out independently of SecurityConfig.
+     */
+    static TeamModule moduleFor(String path) {
+        if (path.contains("/ai/")) return null;
+        if (path.startsWith("/api/v1/clients")) return TeamModule.CLIENTS;
+        if (path.startsWith("/api/v1/leads") || path.startsWith("/api/v1/crm-leads")) return TeamModule.CRM;
+        if (path.startsWith("/api/v1/projects")) return TeamModule.PROJECTS;
+        if (path.startsWith("/api/v1/support-requests")) return TeamModule.SUPPORT;
+        if (path.startsWith("/api/v1/proposals")) return TeamModule.PROPOSALS;
+        if (path.startsWith("/api/v1/outreach")) return TeamModule.OUTREACH;
+        return null;
+    }
+
+    @ParameterizedTest(name = "{0} {1} as TEAM_MEMBER without permissions")
+    @MethodSource("routes")
+    void teamMemberWithoutPermissions(String method, String path, Access access) throws Exception {
+        teamModules = EnumSet.noneOf(TeamModule.class);
+        int status = perform(method, path, token(UserRole.TEAM_MEMBER));
+        if (access == Access.PUBLIC || access == Access.AUTHENTICATED) {
+            assertThat(status).as("TEAM_MEMBER should reach %s %s", method, path).isNotIn(401, 403);
+        } else {
+            assertThat(status).as("TEAM_MEMBER without permissions must be forbidden from %s %s", method, path)
+                    .isEqualTo(403);
+        }
+    }
+
+    @ParameterizedTest(name = "{0} {1} as TEAM_MEMBER with every module")
+    @MethodSource("routes")
+    void teamMemberWithAllModules(String method, String path, Access access) throws Exception {
+        teamModules = EnumSet.allOf(TeamModule.class);
+        int status = perform(method, path, token(UserRole.TEAM_MEMBER));
+        boolean allowed = access == Access.PUBLIC || access == Access.AUTHENTICATED
+                || (access == Access.ADMIN && moduleFor(path) != null);
+        if (allowed) {
+            assertThat(status).as("TEAM_MEMBER with modules should reach %s %s", method, path).isNotIn(401, 403);
+        } else {
+            assertThat(status).as("TEAM_MEMBER must be forbidden from %s %s", method, path).isEqualTo(403);
+        }
+    }
+
+    @Test
+    void teamMemberOnlyReachesTheGrantedModule() throws Exception {
+        teamModules = EnumSet.of(TeamModule.CRM);
+        String token = token(UserRole.TEAM_MEMBER);
+        assertThat(perform("GET", "/api/v1/crm-leads", token)).isNotIn(401, 403);
+        assertThat(perform("GET", "/api/v1/leads", token)).isNotIn(401, 403);
+        assertThat(perform("GET", "/api/v1/clients", token)).isEqualTo(403);
+        assertThat(perform("GET", "/api/v1/projects", token)).isEqualTo(403);
+        assertThat(perform("GET", "/api/v1/invoices", token)).isEqualTo(403);
+        assertThat(perform("GET", "/api/v1/admin/users", token)).isEqualTo(403);
+    }
+
+    @Test
+    void revokedSessionIsRejected() throws Exception {
+        // The account check says "no longer valid" (disabled, role changed or token version bumped).
+        org.mockito.Mockito.when(accountSessionService.authoritiesFor(
+                        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(java.util.Optional.empty());
+        assertThat(perform("GET", "/api/v1/clients", token(UserRole.ADMIN))).isEqualTo(401);
+        assertThat(perform("GET", "/api/v1/auth/me", token(UserRole.CLIENT))).isEqualTo(401);
+    }
+
+    @Test
+    void apiResponsesCarrySecurityHeaders() throws Exception {
+        var response = mvc.perform(request(HttpMethod.GET, "/api/v1/clients")).andReturn().getResponse();
+        assertThat(response.getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
+        assertThat(response.getHeader("X-Frame-Options")).isEqualTo("DENY");
+        assertThat(response.getHeader("Referrer-Policy")).isEqualTo("no-referrer");
+        assertThat(response.getHeader("Content-Security-Policy")).contains("default-src 'none'");
+        assertThat(response.getHeader("Permissions-Policy")).contains("camera=()");
     }
 
     @Test

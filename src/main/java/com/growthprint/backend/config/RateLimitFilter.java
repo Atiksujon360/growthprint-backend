@@ -14,12 +14,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Set;
 
 /**
  * Per-client-IP rate limiting for unauthenticated, abuse-prone endpoints:
  * <ul>
  *     <li>POST /api/v1/public/inquiries (spam protection)</li>
  *     <li>POST /api/v1/auth/login (password brute-force protection)</li>
+ *     <li>account recovery: forgot/reset password and invitation verify/accept (token guessing, email
+ *     flooding)</li>
  * </ul>
  */
 @Component
@@ -28,17 +31,26 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     static final String PUBLIC_INQUIRIES_PATH = "/api/v1/public/inquiries";
     static final String LOGIN_PATH = "/api/v1/auth/login";
+    static final Set<String> ACCOUNT_RECOVERY_PATHS = Set.of(
+            "/api/v1/auth/password/forgot",
+            "/api/v1/auth/password/reset",
+            "/api/v1/auth/password/reset/verify",
+            "/api/v1/auth/invitations/verify",
+            "/api/v1/auth/invitations/accept");
     private static final String RATE_LIMIT_EXCEEDED_MESSAGE = "Rate limit exceeded. Please try again later.";
 
     private final InMemoryRateLimiter rateLimiter;
     private final RateLimitConfig rateLimitConfig;
     private final LoginRateLimitConfig loginRateLimitConfig;
+    private final AccountRecoveryRateLimitConfig accountRecoveryRateLimitConfig;
 
     public RateLimitFilter(InMemoryRateLimiter rateLimiter, RateLimitConfig rateLimitConfig,
-                           LoginRateLimitConfig loginRateLimitConfig) {
+                           LoginRateLimitConfig loginRateLimitConfig,
+                           AccountRecoveryRateLimitConfig accountRecoveryRateLimitConfig) {
         this.rateLimiter = rateLimiter;
         this.rateLimitConfig = rateLimitConfig;
         this.loginRateLimitConfig = loginRateLimitConfig;
+        this.accountRecoveryRateLimitConfig = accountRecoveryRateLimitConfig;
     }
 
     @Override
@@ -58,6 +70,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     && !allowed(request, "login", loginRateLimitConfig.getMaxRequests(),
                     loginRateLimitConfig.getWindow())) {
                 sendRateLimitExceededResponse(response, path, loginRateLimitConfig.getWindow());
+                return;
+            }
+
+            // One shared bucket for all recovery endpoints so they cannot be combined to multiply attempts.
+            if (ACCOUNT_RECOVERY_PATHS.contains(path)
+                    && !allowed(request, "account-recovery", accountRecoveryRateLimitConfig.getMaxRequests(),
+                    accountRecoveryRateLimitConfig.getWindow())) {
+                sendRateLimitExceededResponse(response, path, accountRecoveryRateLimitConfig.getWindow());
                 return;
             }
         }

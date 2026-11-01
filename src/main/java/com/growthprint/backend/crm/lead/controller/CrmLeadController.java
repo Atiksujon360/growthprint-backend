@@ -27,28 +27,28 @@ public class CrmLeadController {
 
     @GetMapping
     @Operation(summary = "List all CRM leads", security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CRM')")
     public List<CrmLeadResponse> list() {
         return crmLeadService.findAll();
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get CRM lead by ID", security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CRM')")
     public CrmLeadResponse getById(@PathVariable UUID id) {
         return crmLeadService.findById(id);
     }
 
     @PostMapping
     @Operation(summary = "Create a new CRM lead", security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CRM')")
     public CrmLeadResponse create(@Valid @RequestBody CreateCrmLeadCommand command) {
         return crmLeadService.create(command);
     }
 
     @PostMapping("/inquiry/{inquiryId}/convert")
     @Operation(summary = "Convert an inquiry to a CRM lead", security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CRM')")
     public CrmLeadResponse convertFromInquiry(
             @PathVariable UUID inquiryId,
             @Valid @RequestBody CreateCrmLeadCommand command) {
@@ -57,7 +57,7 @@ public class CrmLeadController {
 
     @PutMapping("/{id}/pipeline-stage")
     @Operation(summary = "Update CRM lead pipeline stage", security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CRM')")
     public CrmLeadResponse updatePipelineStage(
             @PathVariable UUID id,
             @Valid @RequestBody UpdatePipelineStageCommand command) {
@@ -66,7 +66,7 @@ public class CrmLeadController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a CRM lead", security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CRM')")
     public void delete(@PathVariable UUID id) {
         crmLeadService.delete(id);
     }

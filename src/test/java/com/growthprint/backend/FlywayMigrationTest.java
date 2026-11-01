@@ -109,8 +109,8 @@ class FlywayMigrationTest extends AbstractPostgresIntegrationTest {
 		jdbcTemplate.update("INSERT INTO clients (id, name, legal_name, contact_email, website, status, "
 				+ "contract_start_date, account_manager, billing_currency) VALUES (?, 'V15', 'V15 LLC', "
 				+ "'v15@example.test', 'https://example.test', 'ACTIVE', CURRENT_DATE, 'IT', 'USD')", clientId);
-		jdbcTemplate.update("INSERT INTO users (id, email, normalized_email, password_hash, role, client_id) "
-				+ "VALUES (?, ?, ?, 'x', 'CLIENT', ?)", userId, userId + "@v15.test", userId + "@v15.test", clientId);
+		jdbcTemplate.update("INSERT INTO users (id, email, normalized_email, password_hash, role, client_id, client_role) "
+				+ "VALUES (?, ?, ?, 'x', 'CLIENT', ?, 'CLIENT_OWNER')", userId, userId + "@v15.test", userId + "@v15.test", clientId);
 		jdbcTemplate.update("INSERT INTO invoices (id, invoice_number, client_id, client_name, client_email, issue_date, "
 				+ "due_date, subtotal, tax_percent, tax_amount, total_amount, currency, status) VALUES (?, ?, ?, 'V15', "
 				+ "'v15@example.test', CURRENT_DATE, CURRENT_DATE + 10, 10, 0, 0, 10, 'USD', 'ISSUED')",

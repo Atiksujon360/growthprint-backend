@@ -25,14 +25,14 @@ public class ClientController {
 
     @GetMapping
     @Operation(summary = "List all clients", security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CLIENTS')")
     public List<ClientResponse> list() {
         return clientService.findAll();
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get client by ID", security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CLIENTS')")
     public ClientResponse getById(@PathVariable UUID id) {
         return clientService.findById(id);
     }
@@ -41,7 +41,7 @@ public class ClientController {
     @Operation(summary = "Update client (partial)", security = @SecurityRequirement(name = "bearerAuth"),
             description = "Updatable fields: name, contactEmail, phone (alias: contactPhone), notes. "
                     + "Omitted fields are unchanged; an empty phone clears it.")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CLIENTS')")
     public ClientResponse update(@PathVariable UUID id,
                                  @jakarta.validation.Valid @RequestBody UpdateClientCommand updates) {
         return clientService.update(id, updates);
