@@ -1,8 +1,17 @@
 # GrowthPrint Backend - Project Status
 
-**Last Updated:** 2026-10-27
-**Current Migration Version:** V12
-**Test Status:** 21/32 passing (11 skipped due to Docker unavailability)
+**Last Updated:** 2026-11-01
+**Current Migration Version:** V15 (`V15__create_invoice_payment_reports.sql`; next is V16)
+**Test Status:** see the 2026-11-01 production-readiness section below. Without an isolated PostgreSQL database the
+`postgres`-tagged integration tests are reported as skipped, not passed.
+
+> **2026-11-01 production-readiness pass:** see
+> [docs/audits/2026-11-01-backend-production-readiness-audit.md](docs/audits/2026-11-01-backend-production-readiness-audit.md)
+> for findings, fixes, test evidence and what is still unverified. Highlights: client payment reporting
+> (`POST /api/v1/invoices/my/{id}/reconcile`, admin verify/reject), proposal JSONB mapping fix, support-request
+> data-integrity fixes, RFC 9457-compatible errors, HTTP role-matrix test, PostgreSQL test harness
+> (`GP_IT_DATABASE_URL`/`_USERNAME`/`_PASSWORD`, never Render). The "Docker unavailable" blocker below is
+> superseded: integration tests now run against any isolated PostgreSQL configured via those variables.
 
 ## Overall Progress
 

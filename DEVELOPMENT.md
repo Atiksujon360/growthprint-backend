@@ -294,8 +294,9 @@ Check application logs for:
 1. Check `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` are set
 2. Verify PostgreSQL database is accessible
 3. Check network connectivity to database
-4. Verify JWT_SECRET is set (min 32 characters)
+4. Verify JWT_SECRET is set (min 32 characters) - **Required for Spring Boot 4.1.1 with springboot4-dotenv**
 5. Check application logs for specific error
+6. Ensure springboot4-dotenv dependency is used (not spring-dotenv) for Spring Boot 4.1.1 compatibility
 
 ### Database Connection Failed
 

@@ -19,6 +19,18 @@ This document outlines security policies, authentication, authorization, secrets
 | One CORS configuration (in `SecurityConfig`), `*` origin rejected, `X-Correlation-ID` exposed | Two competing CORS configs removed |
 | Swagger/OpenAPI toggle via `SPRINGDOC_ENABLED` (default `true`) | DEPLOYMENT.md already required it off in prod but it wasn't wired |
 | `Referrer-Policy: no-referrer`; server error pages never include stack traces/messages | Information leakage |
+| `JwtAuthenticationFilter` standalone servlet registration disabled (runs only inside the security chain) | A copy running before the chain caused every authenticated request to be 401 (found by the role-matrix test); production relied on filter ordering |
+| HTTP role-matrix test: every route x anonymous/CLIENT/ADMIN with real JWTs (`RoleMatrixSecurityTest`) | ADMIN/CLIENT rules are now verified at HTTP level, not only by reading SecurityConfig |
+| Client payment reports (V15): clients can report, only ADMIN verification marks an invoice PAID; `/api/v1/invoices/my/**` is CLIENT-only | Clients must never mark invoices paid |
+| Ownership: other clients' support requests / invoices return 404, other clients' proposals 403 | Prevent probing and cross-client actions |
+| Estimate approval records the authenticated user, not a client-supplied name | Spoofable audit trail |
+| All support-request bodies validated (`@Valid`); enum errors no longer leak Java class names | 500s and internal detail leakage |
+| Duplicate/constraint violations return 409 with a generic message (SQL never returned) | Information leakage, misleading 500s |
+| PostgreSQL test harness refuses `render.com` hosts and overrides `DATABASE_URL` | `.env` points at the shared Render DB; tests must never migrate it |
+
+**Open security items (documented, not changed):** seed account `admin@growthprint.dev` with a password that is
+in the repo (`SeedDataCommand`, `seed` profile) - verify it does not exist on Render and rotate if it does;
+JWTs stay valid up to 1 h after an account is disabled; the in-memory rate limiter is per instance.
 
 ## Authentication
 

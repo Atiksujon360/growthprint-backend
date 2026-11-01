@@ -47,7 +47,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * e.g. 400 for an empty body is fine). Ownership (client A vs client B) is covered by service tests and the
  * PostgreSQL workflow tests.
  */
-@org.junit.jupiter.api.Disabled("WIP 2026-11-01: in this @WebMvcTest slice every request with a valid JWT gets 401 (anonymous/public/tampered-token cases pass). Likely the JWT filter is not applied to authenticated requests in the slice; investigate before enabling. Do NOT treat as a production finding until reproduced.")
 @WebMvcTest
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtTokenProvider.class, JwtProperties.class,
         JwtAuthenticationEntryPoint.class, JwtAccessDeniedHandler.class,
