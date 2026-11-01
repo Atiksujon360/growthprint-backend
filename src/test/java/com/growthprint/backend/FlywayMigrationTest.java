@@ -92,6 +92,38 @@ class FlywayMigrationTest extends AbstractPostgresIntegrationTest {
 				Integer.class)).isEqualTo(2);
 	}
 
+	@Test
+	void v15PaymentReportTableAndOnePendingPerInvoiceIndexExist() {
+		assertThat(tableExists("invoice_payment_reports")).isTrue();
+		assertThat(jdbcTemplate.queryForObject(
+				"SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() "
+						+ "AND indexname = 'uq_payment_reports_one_pending_per_invoice'",
+				String.class)).contains("UNIQUE").contains("WHERE").contains("PENDING");
+	}
+
+	@Test
+	void v15RejectsASecondPendingReportForTheSameInvoice() {
+		java.util.UUID clientId = java.util.UUID.randomUUID();
+		java.util.UUID userId = java.util.UUID.randomUUID();
+		java.util.UUID invoiceId = java.util.UUID.randomUUID();
+		jdbcTemplate.update("INSERT INTO clients (id, name, legal_name, contact_email, website, status, "
+				+ "contract_start_date, account_manager, billing_currency) VALUES (?, 'V15', 'V15 LLC', "
+				+ "'v15@example.test', 'https://example.test', 'ACTIVE', CURRENT_DATE, 'IT', 'USD')", clientId);
+		jdbcTemplate.update("INSERT INTO users (id, email, normalized_email, password_hash, role, client_id) "
+				+ "VALUES (?, ?, ?, 'x', 'CLIENT', ?)", userId, userId + "@v15.test", userId + "@v15.test", clientId);
+		jdbcTemplate.update("INSERT INTO invoices (id, invoice_number, client_id, client_name, client_email, issue_date, "
+				+ "due_date, subtotal, tax_percent, tax_amount, total_amount, currency, status) VALUES (?, ?, ?, 'V15', "
+				+ "'v15@example.test', CURRENT_DATE, CURRENT_DATE + 10, 10, 0, 0, 10, 'USD', 'ISSUED')",
+				invoiceId, "INV-V15-" + invoiceId.toString().substring(0, 8).toUpperCase(), clientId);
+		String insert = "INSERT INTO invoice_payment_reports (id, invoice_id, client_id, reported_by_user_id, amount, "
+				+ "currency, payment_method, paid_on) VALUES (gen_random_uuid(), ?, ?, ?, 10, 'USD', 'CARD', CURRENT_DATE)";
+
+		jdbcTemplate.update(insert, invoiceId, clientId, userId);
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbcTemplate.update(insert, invoiceId, clientId, userId))
+				.isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+	}
+
 	private boolean tableExists(String table) {
 		Integer count = jdbcTemplate.queryForObject(
 				"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?",

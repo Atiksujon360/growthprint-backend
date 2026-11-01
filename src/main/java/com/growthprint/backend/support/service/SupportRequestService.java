@@ -38,9 +38,7 @@ import java.util.stream.Collectors;
 @Service
 public class SupportRequestService {
 
-    /** Classification is only meaningful before an estimate exists (prevents duplicate estimates). */
-    private static final Set<SupportRequestStatus> CLASSIFIABLE_STATUSES =
-            EnumSet.of(SupportRequestStatus.NEW, SupportRequestStatus.NEEDS_CLASSIFICATION);
+    /** Classification is allowed at any stage; existing estimates are deleted before re-classification. */
     private static final int MAX_REFERENCE_ATTEMPTS = 10;
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -138,13 +136,10 @@ public class SupportRequestService {
         SupportRequest request = supportRequestRepository.findById(id)
                 .orElseThrow(() -> new SupportRequestNotFoundException("Support request not found"));
 
-        // Re-classifying after an estimate exists used to reset the request to ESTIMATE_PENDING and allow a
-        // second estimate; support_estimates has no unique(request_id), which then broke every read.
-        if (!CLASSIFIABLE_STATUSES.contains(request.getStatus())) {
-            throw new InvalidSupportRequestStatusTransitionException(
-                    "Requests can only be classified while NEW or NEEDS_CLASSIFICATION (current: "
-                            + request.getStatus() + ")");
-        }
+        // If an estimate already exists, delete it before re-classification.
+        // This is safe because V16 added a unique constraint on support_estimates.request_id.
+        supportEstimateRepository.findByRequestId(request.getId())
+                .ifPresent(estimate -> supportEstimateRepository.delete(estimate));
 
         request.setCategory(EnumValues.parse(SupportCategory.class, command.category(), "category"));
         request.setAdminNotes(command.adminNotes());

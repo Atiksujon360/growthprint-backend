@@ -125,6 +125,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/projects/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/outreach/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/proposals/**").hasRole("ADMIN")
+                        // AI provider settings (keys, models, limits) — admin only
+                        .requestMatchers("/api/v1/admin/ai/**").hasRole("ADMIN")
 
                         // Development-only seed endpoint - requires ADMIN role and dev profile
                         // Note: Only active when spring.profiles.active includes "dev" or "development"
@@ -135,6 +137,23 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * JwtAuthenticationFilter is a @Component, so Spring Boot would ALSO register it as a plain servlet filter
+     * outside Spring Security. It must only run inside the security chain (added above via addFilterBefore):
+     * if the standalone copy runs before the chain, it marks the request "already filtered", the chain's
+     * SecurityContextHolderFilter resets the (stateless) context, the in-chain copy is skipped and every
+     * authenticated request becomes a 401. Production only worked because of servlet filter ordering; the
+     * role-matrix test exposed it. Disabling the standalone registration is Spring's recommended setup.
+     */
+    @Bean
+    public org.springframework.boot.web.servlet.FilterRegistrationBean<JwtAuthenticationFilter>
+            jwtAuthenticationFilterRegistration(JwtAuthenticationFilter filter) {
+        org.springframework.boot.web.servlet.FilterRegistrationBean<JwtAuthenticationFilter> registration =
+                new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean

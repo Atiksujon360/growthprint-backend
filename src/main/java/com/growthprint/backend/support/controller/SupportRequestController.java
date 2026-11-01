@@ -64,7 +64,8 @@ public class SupportRequestController {
 
     @PostMapping("/{id}/classify")
     @Operation(summary = "Classify a support request",
-            description = "Only allowed while the request is NEW or NEEDS_CLASSIFICATION; otherwise 400.")
+            description = "Classifies the request and sets its status based on category. " +
+                    "If an estimate already exists, it is deleted before re-classification.")
     @PreAuthorize("hasRole('ADMIN')")
     public SupportRequestResponse classify(@PathVariable UUID id, @Valid @RequestBody ClassifyRequestCommand command) {
         return supportRequestService.classify(id, command);

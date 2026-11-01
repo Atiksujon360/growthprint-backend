@@ -19,6 +19,7 @@ Focused audits on performance characteristics and optimization opportunities.
 ## Audit Documents
 
 - [Baseline Audit - 2026-10-27](./baseline-audit-2026-10-27.md) - Initial project audit
+- [Backend Production-Readiness Audit - 2026-11-01](./2026-11-01-backend-production-readiness-audit.md) - Security, data-integrity and contract audit with fixes and test evidence
 - [Periodic Audit - TBD](./periodic-audit-tbd.md) - Next periodic audit
 - [Security Audit - TBD](./security-audit-tbd.md) - Security-focused audit
 - [Performance Audit - TBD](./performance-audit-tbd.md) - Performance-focused audit

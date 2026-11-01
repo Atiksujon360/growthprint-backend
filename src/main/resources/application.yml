@@ -54,9 +54,28 @@ server:
     include-message: never
 
 app:
+  ai:
+    # AES-256 key (base64 of 32 random bytes) used to encrypt AI provider API keys in the database.
+    # Generate with: openssl rand -base64 32.  Without it, AI keys cannot be saved (the rest of the app works).
+    # Keep it outside the database; losing or changing it means re-entering the provider key.
+    credentials-encryption-key: "${AI_CREDENTIALS_ENCRYPTION_KEY:}"
+
   admin-endpoints:
     # Development-only until server-side authentication and authorization exist.
     enabled: false
+
+  company:
+    # Seller details printed on invoice PDFs (Decision 15). ALL optional: a block that is not configured
+    # is left out of the PDF; nothing (bank, tax or legal details) is ever invented.
+    # Multi-line values (address, payment instructions): separate lines with a literal \n.
+    name: "${COMPANY_NAME:GrowthPrint}"
+    email: "${COMPANY_EMAIL:}"
+    website: "${COMPANY_WEBSITE:}"
+    address: "${COMPANY_ADDRESS:}"
+    phone: "${COMPANY_PHONE:}"
+    tax-id: "${COMPANY_TAX_ID:}"
+    registration-number: "${COMPANY_REGISTRATION_NUMBER:}"
+    payment-instructions: "${COMPANY_PAYMENT_INSTRUCTIONS:}"
 
   security:
     jwt:

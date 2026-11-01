@@ -12,8 +12,9 @@ public interface SupportEstimateRepository extends JpaRepository<SupportEstimate
     Optional<SupportEstimate> findByRequestId(UUID requestId);
 
     /**
-     * Tolerant read: support_estimates has no unique constraint on request_id, so historic data may hold
-     * more than one row per request. Always use this instead of {@link #findByRequestId(UUID)}.
+     * Latest estimate for a request. Since V16, support_estimates.request_id is UNIQUE (at most one estimate per
+     * request; re-classifying deletes the old one), so this and {@link #findByRequestId(UUID)} return the same row.
+     * Kept for reads that must not fail even if V16 is not yet applied to a database.
      */
     Optional<SupportEstimate> findFirstByRequestIdOrderByCreatedAtDesc(UUID requestId);
 
