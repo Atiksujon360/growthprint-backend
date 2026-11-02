@@ -28,6 +28,7 @@ public final class UserAdminDtos {
             String role,
             String accountStatus,
             String clientId,
+            String clientName,
             String clientRole,
             List<String> permissions,
             Instant lastLoginAt,
@@ -35,7 +36,7 @@ public final class UserAdminDtos {
             Instant createdAt) {
 
         /** Must be called inside a transaction (permissions are lazily loaded). */
-        public static ManagedUserResponse from(User user) {
+        public static ManagedUserResponse from(User user, String clientName) {
             return new ManagedUserResponse(
                     user.getId().toString(),
                     user.getEmail(),
@@ -43,6 +44,7 @@ public final class UserAdminDtos {
                     user.getRole().name(),
                     user.getAccountStatus().name(),
                     user.getClientId() == null ? null : user.getClientId().toString(),
+                    clientName,
                     user.getClientRole() == null ? null : user.getClientRole().name(),
                     user.getPermissions().stream().map(Enum::name).sorted().toList(),
                     user.getLastLoginAt(),
@@ -63,14 +65,24 @@ public final class UserAdminDtos {
             UserRole role,
             /** Required for CLIENT users: the client company the login belongs to. */
             UUID clientId,
-            /** CLIENT users only; defaults to CLIENT_MEMBER. */
+            /** CLIENT users only; defaults to CLIENT_OWNER. */
             ClientRole clientRole,
             /** TEAM_MEMBER only. */
             Set<TeamModule> permissions) {
     }
 
-    /** The setup link is returned exactly once, to the admin who created it, and is never stored in plain text. */
-    public record OneTimeLinkResponse(ManagedUserResponse user, String link, Instant expiresAt) {
+    /**
+     * A one-time link. The raw token is returned exactly once, to the admin who created it, and only its
+     * SHA-256 hash is stored. {@code link} is the ready-to-send URL (token in the fragment).
+     */
+    public record OneTimeLink(String token, String link, Instant expiresAt) {
+    }
+
+    public record InvitationResponse(ManagedUserResponse user, OneTimeLink invitation) {
+    }
+
+    /** What an invitee may see before accepting: no ids, no permissions. */
+    public record InvitationPreviewResponse(String email, String fullName, String role, String clientName) {
     }
 
     public record UpdateStatusRequest(@NotNull(message = "Status is required") AccountStatus status) {

@@ -35,7 +35,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/v1/auth/password/forgot",
             "/api/v1/auth/password/reset",
             "/api/v1/auth/password/reset/verify",
-            "/api/v1/auth/invitations/verify",
+            "/api/v1/auth/invitations/preview",
             "/api/v1/auth/invitations/accept");
     private static final String RATE_LIMIT_EXCEEDED_MESSAGE = "Rate limit exceeded. Please try again later.";
 

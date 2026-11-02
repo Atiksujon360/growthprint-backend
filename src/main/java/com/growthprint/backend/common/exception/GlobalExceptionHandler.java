@@ -213,6 +213,19 @@ public class GlobalExceptionHandler {
                 .body(body);
     }
 
+    @ExceptionHandler(com.growthprint.backend.business.exception.BusinessExceptions.BusinessNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleBusinessNotFound(
+            RuntimeException exception, HttpServletRequest request) {
+        // Same answer for "does not exist" and "you are not a member" (no tenant enumeration).
+        return response(HttpStatus.NOT_FOUND, "Business not found", request, Map.of());
+    }
+
+    @ExceptionHandler(com.growthprint.backend.business.exception.BusinessExceptions.BusinessAccessDeniedException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleBusinessAccessDenied(
+            RuntimeException exception, HttpServletRequest request) {
+        return response(HttpStatus.FORBIDDEN, exception.getMessage(), request, Map.of());
+    }
+
     @ExceptionHandler(UserNotFoundException.class)
     public org.springframework.http.ResponseEntity<ApiErrorResponse> handleUserNotFound(
             UserNotFoundException exception, HttpServletRequest request) {

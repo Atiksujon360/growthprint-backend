@@ -140,6 +140,7 @@ public class CrmLeadService {
     public CrmLeadResponse updatePipelineStage(UUID id, UpdatePipelineStageCommand command) {
         CrmLead crmLead = crmLeadRepository.findById(id)
                 .orElseThrow(() -> new CrmLeadNotFoundException(id));
+        CrmLead previous = crmLead;
 
         crmLead = new CrmLead(
                 crmLead.getId(),
@@ -170,6 +171,7 @@ public class CrmLeadService {
                 crmLead.getCreatedAt(),
                 clock.instant()
         );
+        crmLead.carryConversionFrom(previous);
 
         return CrmLeadResponse.from(crmLeadRepository.save(crmLead));
     }

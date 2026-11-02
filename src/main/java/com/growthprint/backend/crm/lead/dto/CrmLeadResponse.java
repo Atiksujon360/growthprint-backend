@@ -33,7 +33,9 @@ public record CrmLeadResponse(
         String notes,
         UUID inquiryId,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        UUID convertedClientId,
+        Instant convertedAt
 ) {
 
     public static CrmLeadResponse from(CrmLead crmLead) {
@@ -64,7 +66,9 @@ public record CrmLeadResponse(
                 crmLead.getNotes(),
                 crmLead.getInquiryId(),
                 crmLead.getCreatedAt(),
-                crmLead.getUpdatedAt()
+                crmLead.getUpdatedAt(),
+                crmLead.getConvertedClientId(),
+                crmLead.getConvertedAt()
         );
     }
 }

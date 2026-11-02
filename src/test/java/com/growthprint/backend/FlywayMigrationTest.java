@@ -47,7 +47,8 @@ class FlywayMigrationTest extends AbstractPostgresIntegrationTest {
 	void allCoreTablesExistInTheMigratedSchema() {
 		for (String table : List.of("leads", "clients", "crm_leads", "users", "projects", "project_milestones",
 				"invoices", "invoice_line_items", "outreach_drafts", "support_requests", "support_estimates",
-				"proposals")) {
+				"proposals", "user_invitations", "team_member_permissions", "password_reset_tokens", "businesses",
+				"business_memberships", "business_invitations")) {
 			assertThat(tableExists(table)).as("table %s", table).isTrue();
 		}
 	}

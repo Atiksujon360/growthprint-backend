@@ -1,5 +1,6 @@
 package com.growthprint.backend.auth.controller;
 
+import com.growthprint.backend.auth.dto.AccountDtos.ChangePasswordRequest;
 import com.growthprint.backend.auth.dto.LoginRequest;
 import com.growthprint.backend.auth.dto.LoginResponse;
 import com.growthprint.backend.auth.dto.UserProfileResponse;
@@ -75,6 +76,26 @@ public class AuthController {
     })
     public ResponseEntity<UserProfileResponse> getCurrentUser(@AuthenticationPrincipal String userId) {
         return ResponseEntity.ok(accountService.profile(UUID.fromString(userId)));
+    }
+
+    /**
+     * Legacy-compatible password change (MVP1 contract): same rules as POST /api/v1/account/password, but
+     * revokes EVERY session including this one and returns 204, so the caller signs in again.
+     */
+    @PostMapping("/password")
+    @Operation(summary = "Change my password and sign out everywhere (204). Prefer POST /api/v1/account/password.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Password changed; all sessions revoked"),
+            @ApiResponse(responseCode = "400", description = "Wrong current password or weak new password",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<Void> changePassword(@AuthenticationPrincipal String userId,
+                                               @Valid @RequestBody ChangePasswordRequest request) {
+        UUID id = UUID.fromString(userId);
+        accountService.changePassword(id, request.currentPassword(), request.newPassword());
+        accountService.revokeAllSessions(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/logout")

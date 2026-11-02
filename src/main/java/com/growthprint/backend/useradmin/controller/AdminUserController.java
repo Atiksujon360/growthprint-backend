@@ -1,8 +1,11 @@
 package com.growthprint.backend.useradmin.controller;
 
+import com.growthprint.backend.auth.entity.AccountStatus;
+import com.growthprint.backend.auth.entity.UserRole;
+import com.growthprint.backend.useradmin.dto.UserAdminDtos.InvitationResponse;
 import com.growthprint.backend.useradmin.dto.UserAdminDtos.InviteUserRequest;
 import com.growthprint.backend.useradmin.dto.UserAdminDtos.ManagedUserResponse;
-import com.growthprint.backend.useradmin.dto.UserAdminDtos.OneTimeLinkResponse;
+import com.growthprint.backend.useradmin.dto.UserAdminDtos.OneTimeLink;
 import com.growthprint.backend.useradmin.dto.UserAdminDtos.SecurityOverviewResponse;
 import com.growthprint.backend.useradmin.dto.UserAdminDtos.UpdatePermissionsRequest;
 import com.growthprint.backend.useradmin.dto.UserAdminDtos.UpdateRoleRequest;
@@ -22,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,9 +50,10 @@ public class AdminUserController {
     }
 
     @GetMapping("/users")
-    @Operation(summary = "List all users (admins, team members, client users)")
-    public List<ManagedUserResponse> list() {
-        return service.listUsers();
+    @Operation(summary = "List users (admins, team members, client users); optional role and client filters")
+    public List<ManagedUserResponse> list(@RequestParam(required = false) UserRole role,
+                                          @RequestParam(required = false) UUID clientId) {
+        return service.listUsers(role, clientId);
     }
 
     @GetMapping("/users/{id}")
@@ -59,22 +64,34 @@ public class AdminUserController {
 
     @PostMapping("/users")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Invite a user; returns a one-time setup link (shown once, never stored in plain text)")
-    public OneTimeLinkResponse invite(@AuthenticationPrincipal String adminId,
-                                      @Valid @RequestBody InviteUserRequest request) {
+    @Operation(summary = "Invite a user; returns a one-time setup link (shown once, only its hash is stored)")
+    public InvitationResponse invite(@AuthenticationPrincipal String adminId,
+                                     @Valid @RequestBody InviteUserRequest request) {
         return service.invite(UUID.fromString(adminId), request);
     }
 
     @PostMapping("/users/{id}/invitation")
     @Operation(summary = "Issue a new setup link for a user who has not accepted yet (older links stop working)")
-    public OneTimeLinkResponse reissueInvitation(@AuthenticationPrincipal String adminId, @PathVariable UUID id) {
+    public OneTimeLink reissueInvitation(@AuthenticationPrincipal String adminId, @PathVariable UUID id) {
         return service.reissueInvitation(UUID.fromString(adminId), id);
     }
 
     @PostMapping("/users/{id}/password-reset-link")
     @Operation(summary = "Issue a one-time password reset link for an active user")
-    public OneTimeLinkResponse passwordResetLink(@AuthenticationPrincipal String adminId, @PathVariable UUID id) {
+    public OneTimeLink passwordResetLink(@AuthenticationPrincipal String adminId, @PathVariable UUID id) {
         return service.issuePasswordResetLink(UUID.fromString(adminId), id);
+    }
+
+    @PostMapping("/users/{id}/suspend")
+    @Operation(summary = "Suspend a user (revokes their sessions immediately)")
+    public ManagedUserResponse suspend(@AuthenticationPrincipal String adminId, @PathVariable UUID id) {
+        return service.changeStatus(UUID.fromString(adminId), id, AccountStatus.SUSPENDED);
+    }
+
+    @PostMapping("/users/{id}/reactivate")
+    @Operation(summary = "Re-activate a suspended or disabled user")
+    public ManagedUserResponse reactivate(@AuthenticationPrincipal String adminId, @PathVariable UUID id) {
+        return service.changeStatus(UUID.fromString(adminId), id, AccountStatus.ACTIVE);
     }
 
     @PatchMapping("/users/{id}/status")

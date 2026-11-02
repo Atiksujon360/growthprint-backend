@@ -5,7 +5,10 @@ import com.growthprint.backend.auth.dto.AccountDtos.ForgotPasswordRequest;
 import com.growthprint.backend.auth.dto.AccountDtos.PasswordPolicyResponse;
 import com.growthprint.backend.auth.dto.AccountDtos.ResetPasswordRequest;
 import com.growthprint.backend.auth.dto.AccountDtos.TokenRequest;
+import com.growthprint.backend.auth.dto.LoginResponse;
+import com.growthprint.backend.auth.service.AccountService;
 import com.growthprint.backend.auth.service.InvitationService;
+import com.growthprint.backend.useradmin.dto.UserAdminDtos.InvitationPreviewResponse;
 import com.growthprint.backend.auth.service.PasswordRecoveryService;
 import com.growthprint.backend.common.dto.ApiErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Public (unauthenticated) account recovery and invitation endpoints. All are rate limited per IP in
@@ -38,11 +42,13 @@ public class AccountRecoveryController {
 
     private final PasswordRecoveryService passwordRecoveryService;
     private final InvitationService invitationService;
+    private final AccountService accountService;
 
     public AccountRecoveryController(PasswordRecoveryService passwordRecoveryService,
-                                     InvitationService invitationService) {
+                                     InvitationService invitationService, AccountService accountService) {
         this.passwordRecoveryService = passwordRecoveryService;
         this.invitationService = invitationService;
+        this.accountService = accountService;
     }
 
     @GetMapping("/password/policy")
@@ -90,22 +96,26 @@ public class AccountRecoveryController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/invitations/verify")
-    @Operation(summary = "Check whether an invitation link is still valid")
-    public ResponseEntity<Void> verifyInvitation(@Valid @RequestBody TokenRequest request) {
-        invitationService.verify(request.token());
-        return ResponseEntity.noContent().build();
+    @PostMapping("/invitations/preview")
+    @Operation(summary = "Show who an invitation is for (email, name, role, client) if the link is still valid")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Invitation is valid"),
+            @ApiResponse(responseCode = "400", description = "Link invalid, expired or used",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public InvitationPreviewResponse previewInvitation(@Valid @RequestBody TokenRequest request) {
+        return invitationService.preview(request.token());
     }
 
     @PostMapping("/invitations/accept")
     @Operation(summary = "Accept an invitation by choosing a password; the account becomes active")
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Account activated"),
+            @ApiResponse(responseCode = "200", description = "Account activated and signed in"),
             @ApiResponse(responseCode = "400", description = "Link invalid/expired/used or password too weak",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
-    public ResponseEntity<Void> acceptInvitation(@Valid @RequestBody AcceptInvitationRequest request) {
-        invitationService.accept(request.token(), request.password());
-        return ResponseEntity.noContent().build();
+    public LoginResponse acceptInvitation(@Valid @RequestBody AcceptInvitationRequest request) {
+        UUID userId = invitationService.accept(request.token(), request.password());
+        return accountService.startSession(userId);
     }
 }

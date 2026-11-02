@@ -29,6 +29,9 @@ import com.growthprint.backend.proposal.service.ProposalService;
 import com.growthprint.backend.support.service.SupportRequestService;
 import com.growthprint.backend.testsupport.SessionStubs;
 import com.growthprint.backend.useradmin.service.UserAdministrationService;
+import com.growthprint.backend.business.service.BusinessMembershipService;
+import com.growthprint.backend.business.service.BusinessService;
+import com.growthprint.backend.crm.lead.service.LeadConversionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -106,6 +109,9 @@ class RoleMatrixSecurityTest {
     @MockitoBean private InvitationService invitationService;
     @MockitoBean private UserAdministrationService userAdministrationService;
     @MockitoBean private AccountSessionService accountSessionService;
+    @MockitoBean private BusinessService businessService;
+    @MockitoBean private LeadConversionService leadConversionService;
+    @MockitoBean private BusinessMembershipService businessMembershipService;
 
     /** Modules granted to the TEAM_MEMBER token in the current test. */
     private Set<TeamModule> teamModules = EnumSet.noneOf(TeamModule.class);
@@ -127,9 +133,10 @@ class RoleMatrixSecurityTest {
                 route("POST", "/api/v1/auth/password/forgot", Access.PUBLIC),
                 route("POST", "/api/v1/auth/password/reset/verify", Access.PUBLIC),
                 route("POST", "/api/v1/auth/password/reset", Access.PUBLIC),
-                route("POST", "/api/v1/auth/invitations/verify", Access.PUBLIC),
+                route("POST", "/api/v1/auth/invitations/preview", Access.PUBLIC),
                 route("POST", "/api/v1/auth/invitations/accept", Access.PUBLIC),
                 route("GET", "/api/v1/auth/me", Access.AUTHENTICATED),
+                route("POST", "/api/v1/auth/password", Access.AUTHENTICATED),
                 // Self-service account settings (always the caller's own account)
                 route("GET", "/api/v1/account/profile", Access.AUTHENTICATED),
                 route("PATCH", "/api/v1/account/profile", Access.AUTHENTICATED),
@@ -144,11 +151,29 @@ class RoleMatrixSecurityTest {
                 route("PUT", "/api/v1/admin/users/" + ID + "/permissions", Access.ADMIN),
                 route("POST", "/api/v1/admin/users/" + ID + "/invitation", Access.ADMIN),
                 route("POST", "/api/v1/admin/users/" + ID + "/password-reset-link", Access.ADMIN),
+                route("GET", "/api/v1/admin/users?role=CLIENT", Access.ADMIN),
+                route("POST", "/api/v1/admin/users/" + ID + "/suspend", Access.ADMIN),
+                route("POST", "/api/v1/admin/users/" + ID + "/reactivate", Access.ADMIN),
                 route("GET", "/api/v1/admin/security/overview", Access.ADMIN),
+                // Businesses: any authenticated user reaches the routes; membership/role is enforced in the
+                // service layer (covered by BusinessMembershipServiceTest and the PostgreSQL tenant tests).
+                route("GET", "/api/v1/businesses", Access.AUTHENTICATED),
+                route("POST", "/api/v1/businesses", Access.AUTHENTICATED),
+                route("GET", "/api/v1/businesses/" + ID, Access.AUTHENTICATED),
+                route("PATCH", "/api/v1/businesses/" + ID, Access.AUTHENTICATED),
+                route("GET", "/api/v1/businesses/" + ID + "/members", Access.AUTHENTICATED),
+                route("PATCH", "/api/v1/businesses/" + ID + "/members/" + ID, Access.AUTHENTICATED),
+                route("DELETE", "/api/v1/businesses/" + ID + "/members/" + ID, Access.AUTHENTICATED),
+                route("POST", "/api/v1/businesses/" + ID + "/ownership-transfer", Access.AUTHENTICATED),
+                route("GET", "/api/v1/businesses/" + ID + "/invitations", Access.AUTHENTICATED),
+                route("POST", "/api/v1/businesses/" + ID + "/invitations", Access.AUTHENTICATED),
+                route("DELETE", "/api/v1/businesses/" + ID + "/invitations/" + ID, Access.AUTHENTICATED),
+                route("POST", "/api/v1/business-invitations/accept", Access.AUTHENTICATED),
                 // Clients
                 route("GET", "/api/v1/clients", Access.ADMIN),
                 route("GET", "/api/v1/clients/" + ID, Access.ADMIN),
                 route("PATCH", "/api/v1/clients/" + ID, Access.ADMIN),
+                route("POST", "/api/v1/clients", Access.ADMIN),
                 // Leads / CRM
                 route("GET", "/api/v1/leads", Access.ADMIN),
                 route("GET", "/api/v1/crm-leads", Access.ADMIN),
@@ -157,6 +182,7 @@ class RoleMatrixSecurityTest {
                 route("POST", "/api/v1/crm-leads/inquiry/" + ID + "/convert", Access.ADMIN),
                 route("PUT", "/api/v1/crm-leads/" + ID + "/pipeline-stage", Access.ADMIN),
                 route("DELETE", "/api/v1/crm-leads/" + ID, Access.ADMIN),
+                route("POST", "/api/v1/crm-leads/" + ID + "/convert-to-client", Access.ADMIN),
                 // Projects
                 route("GET", "/api/v1/projects", Access.ADMIN),
                 route("GET", "/api/v1/projects/my", Access.CLIENT),
@@ -300,6 +326,8 @@ class RoleMatrixSecurityTest {
         assertThat(perform("GET", "/api/v1/projects", token)).isEqualTo(403);
         assertThat(perform("GET", "/api/v1/invoices", token)).isEqualTo(403);
         assertThat(perform("GET", "/api/v1/admin/users", token)).isEqualTo(403);
+        // Conversion creates a client, so CRM alone is not enough
+        assertThat(perform("POST", "/api/v1/crm-leads/" + ID + "/convert-to-client", token)).isEqualTo(403);
     }
 
     @Test

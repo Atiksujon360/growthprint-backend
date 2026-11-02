@@ -124,7 +124,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/password/forgot",
                                 "/api/v1/auth/password/reset",
                                 "/api/v1/auth/password/reset/verify",
-                                "/api/v1/auth/invitations/verify",
+                                "/api/v1/auth/invitations/preview",
                                 "/api/v1/auth/invitations/accept").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/actuator/info").permitAll()
@@ -132,8 +132,13 @@ public class SecurityConfig {
 
                         // Authenticated endpoints
                         .requestMatchers("/api/v1/auth/me").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/password").authenticated()
                         // Self-service account settings: always the caller's own account
                         .requestMatchers("/api/v1/account/**").authenticated()
+                        // Businesses (tenants): authentication here; membership and role are checked per business
+                        // in BusinessAccessService (non-members get 404).
+                        .requestMatchers("/api/v1/businesses", "/api/v1/businesses/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/business-invitations/accept").authenticated()
 
                         // Client-specific endpoints - require CLIENT role with server-side ownership validation
                         .requestMatchers("/api/v1/support-requests/my/**").hasRole("CLIENT")

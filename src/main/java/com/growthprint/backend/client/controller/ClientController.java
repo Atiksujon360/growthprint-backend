@@ -30,6 +30,16 @@ public class ClientController {
         return clientService.findAll();
     }
 
+    @PostMapping
+    @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    @Operation(summary = "Create a client", security = @SecurityRequirement(name = "bearerAuth"))
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CLIENTS')")
+    public ClientResponse create(@org.springframework.security.core.annotation.AuthenticationPrincipal String userId,
+                                 @jakarta.validation.Valid @RequestBody
+                                 com.growthprint.backend.client.dto.CreateClientCommand command) {
+        return clientService.create(command, "GrowthPrint");
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get client by ID", security = @SecurityRequirement(name = "bearerAuth"))
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CLIENTS')")

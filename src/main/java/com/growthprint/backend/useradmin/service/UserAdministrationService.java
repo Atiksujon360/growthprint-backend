@@ -12,15 +12,17 @@ import com.growthprint.backend.auth.repository.UserInvitationRepository;
 import com.growthprint.backend.auth.repository.UserRepository;
 import com.growthprint.backend.auth.service.PasswordPolicy;
 import com.growthprint.backend.auth.service.PasswordRecoveryService;
+import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.repository.ClientRepository;
 import com.growthprint.backend.config.AccountSecurityProperties;
 import com.growthprint.backend.config.JwtProperties;
 import com.growthprint.backend.security.SecureTokens;
 import com.growthprint.backend.security.SecurityAudit;
 import com.growthprint.backend.security.SecurityAudit.Event;
+import com.growthprint.backend.useradmin.dto.UserAdminDtos.InvitationResponse;
 import com.growthprint.backend.useradmin.dto.UserAdminDtos.InviteUserRequest;
 import com.growthprint.backend.useradmin.dto.UserAdminDtos.ManagedUserResponse;
-import com.growthprint.backend.useradmin.dto.UserAdminDtos.OneTimeLinkResponse;
+import com.growthprint.backend.useradmin.dto.UserAdminDtos.OneTimeLink;
 import com.growthprint.backend.useradmin.dto.UserAdminDtos.SecurityOverviewResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,8 +33,11 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * ADMIN-only management of users, staff (TEAM_MEMBER) and their permissions. Guard rails:
@@ -71,20 +76,31 @@ public class UserAdministrationService {
         this.clock = clock;
     }
 
+    /** All users, optionally filtered by role and/or client. */
     @Transactional(readOnly = true)
-    public List<ManagedUserResponse> listUsers() {
-        return userRepository.findAllWithPermissions().stream().map(ManagedUserResponse::from).toList();
+    public List<ManagedUserResponse> listUsers(UserRole role, UUID clientId) {
+        List<User> users = userRepository.findAllWithPermissions().stream()
+                .filter(user -> role == null || user.getRole() == role)
+                .filter(user -> clientId == null || clientId.equals(user.getClientId()))
+                .toList();
+        Set<UUID> clientIds = users.stream().map(User::getClientId).filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> clientNames = clientIds.isEmpty() ? Map.of()
+                : clientRepository.findAllById(clientIds).stream()
+                .collect(Collectors.toMap(Client::getId, Client::getName, (a, b) -> a));
+        return users.stream().map(user -> ManagedUserResponse.from(user, clientNames.get(user.getClientId())))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public ManagedUserResponse getUser(UUID id) {
-        return ManagedUserResponse.from(userRepository.findWithPermissionsById(id)
+        return view(userRepository.findWithPermissionsById(id)
                 .orElseThrow(() -> new UserNotFoundException("User not found")));
     }
 
     /** Creates an INVITED account (no password) and returns its one-time setup link. */
     @Transactional
-    public OneTimeLinkResponse invite(UUID adminId, InviteUserRequest request) {
+    public InvitationResponse invite(UUID adminId, InviteUserRequest request) {
         String normalizedEmail = request.email().trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByNormalizedEmail(normalizedEmail)) {
             throw new IllegalStateException("An account with this email already exists");
@@ -99,11 +115,12 @@ public class UserAdministrationService {
                 throw new IllegalArgumentException("Client not found");
             }
             clientId = request.clientId();
-            clientRole = request.clientRole() == null ? ClientRole.CLIENT_MEMBER : request.clientRole();
+            clientRole = request.clientRole() == null ? ClientRole.CLIENT_OWNER : request.clientRole();
         } else if (request.clientId() != null || request.clientRole() != null) {
             throw new IllegalArgumentException("Only client users can belong to a client");
         }
-        if (request.role() != UserRole.TEAM_MEMBER && request.permissions() != null && !request.permissions().isEmpty()) {
+        if (request.role() != UserRole.TEAM_MEMBER && request.permissions() != null
+                && !request.permissions().isEmpty()) {
             throw new IllegalArgumentException("Module permissions apply to team members only");
         }
 
@@ -116,27 +133,26 @@ public class UserAdministrationService {
         }
         userRepository.save(user);
 
-        OneTimeLinkResponse response = newInvitation(user, adminId, now);
+        OneTimeLink link = newInvitation(user, adminId, now);
         SecurityAudit.record(Event.INVITATION_CREATED, adminId, user.getId(), request.role().name());
-        return response;
+        return new InvitationResponse(view(user), link);
     }
 
     /** Issues a fresh setup link for an account that has not accepted its invitation; older links stop working. */
     @Transactional
-    public OneTimeLinkResponse reissueInvitation(UUID adminId, UUID userId) {
+    public OneTimeLink reissueInvitation(UUID adminId, UUID userId) {
         User user = lock(userId);
         if (user.getAccountStatus() != AccountStatus.INVITED) {
             throw new IllegalStateException("This account has already been set up");
         }
-        Instant now = clock.instant();
-        OneTimeLinkResponse response = newInvitation(user, adminId, now);
+        OneTimeLink link = newInvitation(user, adminId, clock.instant());
         SecurityAudit.record(Event.INVITATION_CREATED, adminId, userId, "reissued");
-        return response;
+        return link;
     }
 
     /** One-time password reset link for an active user (for when email delivery is not configured). */
     @Transactional
-    public OneTimeLinkResponse issuePasswordResetLink(UUID adminId, UUID userId) {
+    public OneTimeLink issuePasswordResetLink(UUID adminId, UUID userId) {
         User user = lock(userId);
         if (user.getAccountStatus() != AccountStatus.ACTIVE) {
             throw new IllegalStateException("Password reset links can only be issued for active accounts");
@@ -144,7 +160,7 @@ public class UserAdministrationService {
         Instant now = clock.instant();
         String link = passwordRecoveryService.issueResetLink(user, now);
         SecurityAudit.record(Event.PASSWORD_RESET_REQUESTED, adminId, userId, "admin-issued-link");
-        return new OneTimeLinkResponse(ManagedUserResponse.from(user), link,
+        return new OneTimeLink(link.substring(link.indexOf("#token=") + "#token=".length()), link,
                 now.plus(properties.getPasswordResetTtl()));
     }
 
@@ -169,7 +185,7 @@ public class UserAdministrationService {
             revokePendingInvitations(userId, clock.instant());
         }
         SecurityAudit.record(Event.ACCOUNT_STATUS_CHANGED, adminId, userId, previous + "->" + status);
-        return ManagedUserResponse.from(user);
+        return view(user);
     }
 
     @Transactional
@@ -187,7 +203,7 @@ public class UserAdministrationService {
         UserRole previous = user.getRole();
         user.changeInternalRole(role);
         SecurityAudit.record(Event.ROLE_CHANGED, adminId, userId, previous + "->" + role);
-        return ManagedUserResponse.from(user);
+        return view(user);
     }
 
     @Transactional
@@ -196,7 +212,7 @@ public class UserAdministrationService {
         user.replacePermissions(modules == null ? EnumSet.noneOf(TeamModule.class) : modules);
         SecurityAudit.record(Event.PERMISSIONS_CHANGED, adminId, userId,
                 String.join(",", user.getPermissions().stream().map(Enum::name).sorted().toList()));
-        return ManagedUserResponse.from(user);
+        return view(user);
     }
 
     @Transactional(readOnly = true)
@@ -212,7 +228,13 @@ public class UserAdministrationService {
                 userRepository.countByRoleAndAccountStatus(UserRole.ADMIN, AccountStatus.ACTIVE));
     }
 
-    private OneTimeLinkResponse newInvitation(User user, UUID adminId, Instant now) {
+    private ManagedUserResponse view(User user) {
+        String clientName = user.getClientId() == null ? null
+                : clientRepository.findById(user.getClientId()).map(Client::getName).orElse(null);
+        return ManagedUserResponse.from(user, clientName);
+    }
+
+    private OneTimeLink newInvitation(User user, UUID adminId, Instant now) {
         revokePendingInvitations(user.getId(), now);
         // Flush the revocations first: the partial unique index allows only one PENDING invitation per user.
         invitationRepository.flush();
@@ -221,7 +243,7 @@ public class UserAdministrationService {
         invitationRepository.save(new UserInvitation(UUID.randomUUID(), user.getId(),
                 SecureTokens.sha256Hex(rawToken), expiresAt, adminId, now));
         String link = properties.normalizedFrontendBaseUrl() + "/accept-invite#token=" + rawToken;
-        return new OneTimeLinkResponse(ManagedUserResponse.from(user), link, expiresAt);
+        return new OneTimeLink(rawToken, link, expiresAt);
     }
 
     private void revokePendingInvitations(UUID userId, Instant now) {

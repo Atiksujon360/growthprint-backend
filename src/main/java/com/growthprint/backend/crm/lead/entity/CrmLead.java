@@ -106,6 +106,12 @@ public class CrmLead {
     @Column(name = "inquiry_id")
     private UUID inquiryId;
 
+    @Column(name = "converted_client_id")
+    private UUID convertedClientId;
+
+    @Column(name = "converted_at")
+    private Instant convertedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -177,6 +183,29 @@ public class CrmLead {
     public Boolean getDoNotContact() { return doNotContact; }
     public String getNotes() { return notes; }
     public UUID getInquiryId() { return inquiryId; }
+    public UUID getConvertedClientId() { return convertedClientId; }
+    public Instant getConvertedAt() { return convertedAt; }
+
+    public boolean isConverted() {
+        return convertedClientId != null;
+    }
+
+    /** Records the one-time conversion into a client and moves the lead to WON. */
+    public void markConverted(UUID clientId, Instant now) {
+        if (convertedClientId != null) {
+            throw new IllegalStateException("This lead has already been converted to a client");
+        }
+        this.convertedClientId = clientId;
+        this.convertedAt = now;
+        this.pipelineStage = CrmLeadPipelineStage.WON;
+        this.updatedAt = now;
+    }
+
+    /** Keeps the conversion record when the service rebuilds the entity (see CrmLeadService.updatePipelineStage). */
+    public void carryConversionFrom(CrmLead previous) {
+        this.convertedClientId = previous.convertedClientId;
+        this.convertedAt = previous.convertedAt;
+    }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

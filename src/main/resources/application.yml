@@ -60,6 +60,11 @@ app:
     # Keep it outside the database; losing or changing it means re-entering the provider key.
     credentials-encryption-key: "${AI_CREDENTIALS_ENCRYPTION_KEY:}"
 
+  businesses:
+    # MVP2 M1.1: while MVP1 data is not yet scoped to businesses (M2), only global ADMINs may create businesses.
+    # Do not enable before tenant data migration and tenant-scoped queries are complete.
+    self-service-creation-enabled: false
+
   admin-endpoints:
     # Development-only until server-side authentication and authorization exist.
     enabled: false
