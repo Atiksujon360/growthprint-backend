@@ -120,4 +120,8 @@ public class BusinessInvitation {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public UUID getInvitedByUserId() {
+        return invitedByUserId;
+    }
 }

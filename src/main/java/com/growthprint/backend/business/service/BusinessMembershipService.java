@@ -218,7 +218,7 @@ public class BusinessMembershipService {
      * The signed-in user joins the business. The invitation must be pending, unexpired and addressed to the
      * user's own email, so a leaked link cannot be used by a different account.
      */
-    @Transactional
+    @Transactional(noRollbackFor = InvalidAccountTokenException.class)
     public BusinessResponse acceptInvitation(UUID userId, String rawToken) {
         if (!SecureTokens.looksValid(rawToken)) {
             throw new InvalidAccountTokenException();
@@ -237,6 +237,14 @@ public class BusinessMembershipService {
         Business business = businessRepository.findById(invitation.getBusinessId())
                 .filter(Business::isActive)
                 .orElseThrow(InvalidAccountTokenException::new);
+        if (!inviterStillAuthorized(invitation)) {
+            // The person who sent it was removed or demoted since: the invitation no longer carries authority.
+            invitation.revoke(now);
+            SecurityAudit.record(Event.BUSINESS_INVITATION_REVOKED, null, userId,
+                    "business=" + business.getId() + " inviter-no-longer-authorized");
+            // noRollbackFor on this method keeps the revocation committed while the caller gets a 400.
+            throw new InvalidAccountTokenException();
+        }
 
         BusinessMembership membership = membershipRepository.findOne(business.getId(), userId).orElse(null);
         if (membership == null) {
@@ -261,6 +269,17 @@ public class BusinessMembershipService {
     }
 
     // ---------------------------------------------------------------------------------------------
+
+    /** The inviter must still be an active member who could send this invitation today. */
+    private boolean inviterStillAuthorized(BusinessInvitation invitation) {
+        if (invitation.getInvitedByUserId() == null) {
+            return false;
+        }
+        return membershipRepository.findActive(invitation.getBusinessId(), invitation.getInvitedByUserId())
+                .map(m -> m.getRole() == BusinessRole.OWNER
+                        || (m.getRole().atLeast(BusinessRole.ADMIN) && m.getRole().outranks(invitation.getRole())))
+                .orElse(false);
+    }
 
     private void lockBusiness(UUID businessId) {
         businessRepository.findForUpdateById(businessId).orElseThrow(BusinessNotFoundException::new);

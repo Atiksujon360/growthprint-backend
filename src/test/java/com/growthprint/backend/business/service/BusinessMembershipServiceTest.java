@@ -202,6 +202,23 @@ class BusinessMembershipServiceTest {
     }
 
     @Test
+    void invitationsFromADemotedOrRemovedInviterNoLongerWork() {
+        var created = service.invite(businessId, admin, "late@example.test", BusinessRole.MANAGER);
+        BusinessInvitation stored = new BusinessInvitation(created.invitation().id(), businessId, "late@example.test",
+                BusinessRole.MANAGER, SecureTokens.sha256Hex(created.token()), NOW.plusSeconds(3600), admin, NOW);
+        when(invitations.findForUpdateByTokenHash(SecureTokens.sha256Hex(created.token())))
+                .thenReturn(Optional.of(stored));
+        service.changeRole(businessId, owner, admin, BusinessRole.MEMBER);
+
+        UUID invitee = UUID.randomUUID();
+        when(users.findById(invitee)).thenReturn(Optional.of(user(invitee, "late@example.test", UserRole.TEAM_MEMBER)));
+        assertThatThrownBy(() -> service.acceptInvitation(invitee, created.token()))
+                .isInstanceOf(InvalidAccountTokenException.class);
+        assertThat(stored.getStatus()).isEqualTo(BusinessInvitation.REVOKED);
+        assertThat(table.get(key(businessId, invitee))).isNull();
+    }
+
+    @Test
     void noRoleCanEscalateItself() {
         assertThatThrownBy(() -> service.changeRole(businessId, admin, admin, BusinessRole.OWNER))
                 .isInstanceOf(BusinessAccessDeniedException.class);

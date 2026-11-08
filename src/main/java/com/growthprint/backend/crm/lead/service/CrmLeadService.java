@@ -141,6 +141,10 @@ public class CrmLeadService {
         CrmLead crmLead = crmLeadRepository.findById(id)
                 .orElseThrow(() -> new CrmLeadNotFoundException(id));
         CrmLead previous = crmLead;
+        if (previous.isConverted()
+                && command.pipelineStage() != com.growthprint.backend.crm.lead.entity.CrmLeadEnums.CrmLeadPipelineStage.WON) {
+            throw new IllegalStateException("This lead was converted to a client and stays WON");
+        }
 
         crmLead = new CrmLead(
                 crmLead.getId(),
@@ -180,6 +184,9 @@ public class CrmLeadService {
     public void delete(UUID id) {
         CrmLead crmLead = crmLeadRepository.findById(id)
                 .orElseThrow(() -> new CrmLeadNotFoundException(id));
+        if (crmLead.isConverted()) {
+            throw new IllegalStateException("A lead that was converted to a client cannot be deleted");
+        }
         crmLeadRepository.delete(crmLead);
     }
 }
