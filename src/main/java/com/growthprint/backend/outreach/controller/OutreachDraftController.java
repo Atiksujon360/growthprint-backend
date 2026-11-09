@@ -25,28 +25,28 @@ public class OutreachDraftController {
 
     @GetMapping
     @Operation(summary = "List all outreach drafts")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_OUTREACH')")
     public List<OutreachDraftResponse> list() {
         return outreachDraftService.findAll();
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get outreach draft by ID")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_OUTREACH')")
     public OutreachDraftResponse getById(@PathVariable UUID id) {
         return outreachDraftService.findById(id);
     }
 
     @PostMapping("/{id}/approve")
     @Operation(summary = "Approve an outreach draft")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_OUTREACH')")
     public OutreachDraftResponse approve(@PathVariable UUID id) {
         return outreachDraftService.approve(id);
     }
 
     @PostMapping("/{id}/send")
     @Operation(summary = "Send an approved outreach draft (record only, no actual email sent)")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_OUTREACH')")
     public OutreachDraftResponse send(@PathVariable UUID id) {
         return outreachDraftService.send(id);
     }

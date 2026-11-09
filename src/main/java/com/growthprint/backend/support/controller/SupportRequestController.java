@@ -27,7 +27,7 @@ public class SupportRequestController {
 
     @GetMapping
     @Operation(summary = "List all support requests")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_SUPPORT')")
     public List<SupportRequestResponse> list() {
         return supportRequestService.findAll();
     }
@@ -41,14 +41,14 @@ public class SupportRequestController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get support request by ID")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_SUPPORT')")
     public SupportRequestResponse getById(@PathVariable UUID id) {
         return supportRequestService.findById(id);
     }
 
     @PostMapping
     @Operation(summary = "Create a support request")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_SUPPORT')")
     public SupportRequestResponse create(@Valid @RequestBody CreateSupportRequestCommand command) {
         return supportRequestService.create(command);
     }
@@ -66,21 +66,21 @@ public class SupportRequestController {
     @Operation(summary = "Classify a support request",
             description = "Classifies the request and sets its status based on category. " +
                     "If an estimate already exists, it is deleted before re-classification.")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_SUPPORT')")
     public SupportRequestResponse classify(@PathVariable UUID id, @Valid @RequestBody ClassifyRequestCommand command) {
         return supportRequestService.classify(id, command);
     }
 
     @PostMapping("/{id}/estimate")
     @Operation(summary = "Attach an estimate to a support request")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_SUPPORT')")
     public SupportRequestResponse attachEstimate(@PathVariable UUID id, @Valid @RequestBody AttachEstimateCommand command) {
         return supportRequestService.attachEstimate(id, command);
     }
 
     @PostMapping("/{id}/approve-estimate")
     @Operation(summary = "Approve an estimate for a support request")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_SUPPORT')")
     public SupportRequestResponse approveEstimate(@PathVariable UUID id, @Valid @RequestBody ApproveEstimateCommand command) {
         return supportRequestService.approveEstimate(id, command);
     }
@@ -99,7 +99,7 @@ public class SupportRequestController {
 
     @PatchMapping("/{id}/status")
     @Operation(summary = "Update support request status")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_SUPPORT')")
     public SupportRequestResponse updateStatus(@PathVariable UUID id, @Valid @RequestBody UpdateRequestStatusCommand command) {
         return supportRequestService.updateStatus(id, command);
     }

@@ -24,6 +24,21 @@ public class JwtTokenProvider {
      */
     static final String LEAKED_DEFAULT_SECRET = "default-dev-secret-key-for-growthprint-backend-min-32-chars";
 
+    /** Claim holding users.token_version. Tokens issued before V20 have no claim and count as version 0. */
+    public static final String TOKEN_VERSION_CLAIM = "ver";
+
+    /** Reads the token-version claim; missing (pre-V20 tokens) means 0, malformed means -1 (never matches). */
+    public static int tokenVersionOf(Claims claims) {
+        Object raw = claims.get(TOKEN_VERSION_CLAIM);
+        if (raw == null) {
+            return 0;
+        }
+        if (raw instanceof Number number) {
+            return number.intValue();
+        }
+        return -1;
+    }
+
     private final JwtProperties jwtProperties;
     private final SecretKey signingKey;
 
@@ -50,6 +65,9 @@ public class JwtTokenProvider {
                 .subject(user.getId().toString())
                 .claim("email", user.getEmail())
                 .claim("role", user.getRole().name())
+                // Token version (V20): bumping users.token_version revokes this token on the next request.
+                .claim(TOKEN_VERSION_CLAIM, user.getTokenVersion())
+                .id(UUID.randomUUID().toString())
                 .issuer(jwtProperties.getIssuer())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiration))
