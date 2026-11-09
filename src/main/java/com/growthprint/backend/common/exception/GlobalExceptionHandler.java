@@ -1,6 +1,9 @@
 package com.growthprint.backend.common.exception;
 
 import com.growthprint.backend.auth.exception.AuthenticationFailedException;
+import com.growthprint.backend.auth.exception.CurrentPasswordMismatchException;
+import com.growthprint.backend.auth.exception.InvalidAccountTokenException;
+import com.growthprint.backend.auth.exception.WeakPasswordException;
 import com.growthprint.backend.auth.exception.UserNotFoundException;
 import com.growthprint.backend.client.exception.ClientNotFoundException;
 import com.growthprint.backend.common.dto.ApiErrorResponse;
@@ -176,6 +179,51 @@ public class GlobalExceptionHandler {
             AuthenticationFailedException exception, HttpServletRequest request) {
         // Always the same generic message: never reveal whether the email exists.
         return response(HttpStatus.UNAUTHORIZED, "Invalid credentials", request, Map.of());
+    }
+
+    @ExceptionHandler(WeakPasswordException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleWeakPassword(
+            WeakPasswordException exception, HttpServletRequest request) {
+        return response(HttpStatus.BAD_REQUEST, "Password does not meet the requirements", request,
+                Map.of(exception.getField(), String.join(". ", exception.getViolations())));
+    }
+
+    @ExceptionHandler(InvalidAccountTokenException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleInvalidAccountToken(
+            InvalidAccountTokenException exception, HttpServletRequest request) {
+        return response(HttpStatus.BAD_REQUEST, InvalidAccountTokenException.MESSAGE, request, Map.of());
+    }
+
+    @ExceptionHandler(CurrentPasswordMismatchException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleCurrentPasswordMismatch(
+            CurrentPasswordMismatchException exception, HttpServletRequest request) {
+        // 400, not 401: a 401 would make the frontend treat it as an expired session.
+        return response(HttpStatus.BAD_REQUEST, "Current password is incorrect", request,
+                Map.of("currentPassword", "Current password is incorrect"));
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleTooManyRequests(
+            TooManyRequestsException exception, HttpServletRequest request) {
+        ApiErrorResponse body = ApiErrorResponse.of(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(),
+                request.getRequestURI(), Map.of());
+        return org.springframework.http.ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(Math.max(1, exception.getRetryAfter().toSeconds())))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
+    }
+
+    @ExceptionHandler(com.growthprint.backend.business.exception.BusinessExceptions.BusinessNotFoundException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleBusinessNotFound(
+            RuntimeException exception, HttpServletRequest request) {
+        // Same answer for "does not exist" and "you are not a member" (no tenant enumeration).
+        return response(HttpStatus.NOT_FOUND, "Business not found", request, Map.of());
+    }
+
+    @ExceptionHandler(com.growthprint.backend.business.exception.BusinessExceptions.BusinessAccessDeniedException.class)
+    public org.springframework.http.ResponseEntity<ApiErrorResponse> handleBusinessAccessDenied(
+            RuntimeException exception, HttpServletRequest request) {
+        return response(HttpStatus.FORBIDDEN, exception.getMessage(), request, Map.of());
     }
 
     @ExceptionHandler(UserNotFoundException.class)

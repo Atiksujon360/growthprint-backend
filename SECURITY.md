@@ -4,6 +4,60 @@
 
 This document outlines security policies, authentication, authorization, secrets management, and vulnerability handling for the GrowthPrint backend. All security practices are based on OWASP ASVS and OWASP Cheat Sheet Series.
 
+## Security Hardening Log (2026-11-02) — account security, staff access, password recovery
+
+Branch `feature/growthprint-professional-improvements`. Migration **V20** (`V20__account_security_and_password_recovery.sql`).
+
+| Change | Why |
+|---|---|
+| `users.token_version` + `ver` JWT claim; every request re-checks the account (`AccountSessionService`): must exist, be `ACTIVE`, have the same role and the same token version | Password change/reset, "sign out everywhere", suspension, deactivation and role changes now revoke existing tokens **immediately** (previously valid until expiry, up to 1 h). Pre-V20 tokens have no claim and count as version 0, so existing sessions survive the deploy |
+| Authorities are loaded from the database per request, not from the token | Revoking a team member's module takes effect on their next request |
+| `TEAM_MEMBER` role (V17 schema, now implemented). Module permissions: `CRM`, `CLIENTS`, `PROJECTS`, `SUPPORT`, `PROPOSALS`, `OUTREACH` → authorities `PERM_*`; URL rules in `SecurityConfig` and `@PreAuthorize` on the module controllers | Staff can work on granted modules only. Invoices/payment reports, AI settings, AI triage and user management stay ADMIN-only (not grantable) |
+| User administration (`/api/v1/admin/users/**`, `/api/v1/admin/security/overview`), ADMIN only | Invite (INVITED account, no password), resend invitation, admin-issued reset link, suspend/reactivate/disable, ADMIN↔TEAM_MEMBER role change, permissions. Guard rails: no self status/role change, last active admin cannot be suspended/demoted, client logins never become staff, accounts are deactivated not deleted |
+| Self-service account endpoints (`/api/v1/account/**`): profile, preferences, change password (returns a fresh token for this device, revokes all others), sign out everywhere | No user id in the path: a user can only ever address their own account; role/status/email/client membership are not editable there |
+| Legacy `POST /api/v1/auth/password` (change password, revokes all sessions incl. the current one, 204) | MVP1-compatible contract |
+| Password policy (`PasswordPolicy`): 12–128 chars, a letter and a digit, not a common password, must not contain the email name; applied to every **new** password | NIST SP 800-63B style; existing passwords keep working |
+| Forgot password: `POST /auth/password/forgot` always answers `202` with the same message; `/reset/verify`; `/reset` | No account enumeration. Tokens: 256-bit `SecureRandom`, only SHA-256 stored (`password_reset_tokens`), single use (row lock + `used_at`), 30 min TTL, older links deleted on a new request, only ACTIVE accounts, weak password keeps the link usable |
+| Invitations: `/auth/invitations/preview` and `/auth/invitations/accept` (auto sign-in) | Same token handling (SHA-256 in `user_invitations`, 72 h TTL, reissue revokes older links) |
+| Links put the token in the URL **fragment** (`/reset-password#token=…`, `/accept-invite#token=…`); tokens are POSTed in JSON bodies | Fragments are not sent to servers, so tokens do not end up in access logs or `Referer` headers |
+| Rate limits: shared per-IP bucket for all recovery/invitation endpoints (`app.rate-limit.account-recovery`, 10 / 15 min); per-account login throttle (20 / 15 min, keyed by SHA-256 of the email, `429` + `Retry-After`); per-account reset-email throttle (3 / h, silently ignored beyond) | Brute force from many IPs against one account, token guessing, email flooding |
+| `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` on `/api/**`, `X-Frame-Options: DENY`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` | Defence in depth for JSON responses (Swagger UI unaffected) |
+| `SECURITY_AUDIT` logger (`SecurityAudit`): login success/failure/throttle, password change/reset, sessions revoked, invitations, status/role/permission changes | Audit trail. Events carry user ids only — never emails, passwords, tokens or links |
+| New errors: weak password / invalid link / wrong current password → `400` (field errors), throttling → `429` | RFC 9457-compatible body; wrong current password is not a 401 so clients do not treat it as an expired session |
+
+### Password recovery: required configuration
+
+| Setting | Purpose |
+|---|---|
+| `FRONTEND_BASE_URL` (env) → `app.security.account.frontend-base-url` | Public frontend URL used in reset and invitation links (default `http://localhost:3000`). **Set it on Render** to the Vercel URL, e.g. `https://growth-print-frontend.vercel.app` |
+| `app.security.account.password-reset-ttl` / `invitation-ttl` | Link lifetimes (30 min / 72 h) |
+
+**Email delivery is NOT configured.** No email provider or mail dependency exists in this project (decision 18). The
+default `UnconfiguredAccountEmailSender` sends nothing and logs a warning *without* the link or address. Until a
+provider is connected:
+
+- the forgot-password page still answers generically, but no email arrives;
+- the admin can create a one-time reset link for a user in the studio (Users & team → "Reset link",
+  `POST /api/v1/admin/users/{id}/password-reset-link`) and share it through a trusted channel;
+- invitation links are shown once to the admin who created them.
+
+To connect a provider: add a Spring bean implementing `com.growthprint.backend.auth.notification.AccountEmailSender`
+(for example backed by `spring-boot-starter-mail` + SMTP credentials from environment variables, or a provider's HTTP
+API). Registering any `AccountEmailSender` bean replaces the no-op one (`AccountEmailConfig`, `@ConditionalOnMissingBean`).
+Adding the dependency and credentials requires the founder's approval.
+
+### Remaining risks (not fixed in this pass)
+
+- **Client-assignment scoping is not enforced.** V17 has `client_assignments` / `clients.owner_user_id`, but a team
+  member with a module (e.g. `CLIENTS`) sees **all** clients' records in that module. Grant modules only to trusted staff.
+- No refresh tokens: access tokens live 1 h; the frontend keeps the token in `sessionStorage` (XSS-readable).
+  Moving to httpOnly cookies + refresh tokens is an authentication-architecture change that needs approval.
+- Rate limiting is in-memory and per instance (fine for one Render instance; use a shared store before scaling out).
+- Per-request account lookup adds one indexed query per authenticated request.
+- Reset requests for known vs unknown emails do slightly different work (DB insert); response bodies and status are
+  identical, timing is not strictly equalised.
+- The seed account noted below still applies.
+
 ## Security Hardening Log (2026-11-01)
 
 | Change | Why |

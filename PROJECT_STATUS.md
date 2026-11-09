@@ -1,7 +1,17 @@
 # GrowthPrint Backend - Project Status
 
-**Last Updated:** 2026-11-01
-**Current Migration Version:** V15 (`V15__create_invoice_payment_reports.sql`; next is V16)
+**Last Updated:** 2026-11-02
+**Current Migration Version:** V20 (`V20__account_security_and_password_recovery.sql`; next is **V21**).
+V18 is intentionally unused: V19 may already be applied in production, and Flyway would reject a lower version added later.
+
+> **2026-11-02 account security pass** (branch `feature/growthprint-professional-improvements`): token-version
+> session revocation, TEAM_MEMBER module permissions, admin user management, self-service account settings,
+> password policy, forgot/reset password and invitation flows, extra throttles and headers. Details and remaining
+> risks: SECURITY.md "Security Hardening Log (2026-11-02)". Test run: `mvnw clean test` → 787 tests, 0 failures,
+> 40 skipped (PostgreSQL-tagged tests need `GP_IT_DATABASE_URL`; the new `AccountSecurityWorkflowIntegrationTest`
+> is among them and has **not** been run against a real database yet).
+> Known gap: `PortalOnboardingWorkflowIntegrationTest` also expects `POST /api/v1/crm-leads/{id}/convert-to-client`
+> and `POST /api/v1/clients`, which do not exist yet.
 **Test Status:** see the 2026-11-01 production-readiness section below. Without an isolated PostgreSQL database the
 `postgres`-tagged integration tests are reported as skipped, not passed.
 

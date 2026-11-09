@@ -33,7 +33,7 @@ public class ProjectController {
 
     @GetMapping
     @Operation(summary = "List all projects")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROJECTS')")
     public List<ProjectResponse> list() {
         return projectService.findAll();
     }
@@ -47,21 +47,21 @@ public class ProjectController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get project by ID")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROJECTS')")
     public ProjectResponse getById(@PathVariable UUID id) {
         return projectService.findById(id);
     }
 
     @PostMapping
     @Operation(summary = "Create a new project")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROJECTS')")
     public ProjectResponse create(@Valid @RequestBody CreateProjectCommand command) {
         return projectService.create(command);
     }
 
     @RequestMapping(value = "/{id}/status", method = PATCH)
     @Operation(summary = "Update project status")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROJECTS')")
     public ProjectResponse updateStatus(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateProjectStatusCommand command) {
@@ -70,7 +70,7 @@ public class ProjectController {
 
     @PostMapping("/{projectId}/milestones")
     @Operation(summary = "Create a milestone for a project")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROJECTS')")
     public MilestoneResponse createMilestone(
             @PathVariable UUID projectId,
             @Valid @RequestBody CreateMilestoneCommand command) {

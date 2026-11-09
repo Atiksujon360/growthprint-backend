@@ -92,7 +92,7 @@ class BusinessWorkflowIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void decidingOnAnExpiredProposalPersistsExpired() throws Exception {
         String proposalId = id(call(HttpMethod.POST, "/api/v1/proposals", adminToken, proposalJson(clientA), 200));
-        jdbc.update("UPDATE proposals SET status = 'SENT_FOR_REVIEW', valid_until = CURRENT_DATE - 1 WHERE id = ?::uuid",
+        jdbc.update("UPDATE proposals SET status = 'SENT_FOR_REVIEW', valid_until = (now() AT TIME ZONE 'UTC')::date - 1 WHERE id = ?::uuid",
                 proposalId);
 
         call(HttpMethod.POST, "/api/v1/proposals/my/" + proposalId + "/decision", clientAToken,
@@ -123,9 +123,14 @@ class BusinessWorkflowIntegrationTest extends AbstractPostgresIntegrationTest {
         call(HttpMethod.POST, "/api/v1/support-requests/" + requestId + "/estimate", adminToken,
                 "{\"estimatedHours\":3,\"hourlyRate\":100,\"deliveryTimelineDays\":2,\"explanation\":\"Fix\"}", 200);
 
-        // Re-classification once an estimate exists is refused (previously created a second estimate).
-        call(HttpMethod.POST, "/api/v1/support-requests/" + requestId + "/classify", adminToken,
-                "{\"category\":\"PAID_AD_HOC_SUPPORT\"}", 400);
+        // Decision 16: re-classifying replaces the estimate (never a second one) and resets the request.
+        MvcResult reclassified = call(HttpMethod.POST, "/api/v1/support-requests/" + requestId + "/classify",
+                adminToken, "{\"category\":\"PAID_AD_HOC_SUPPORT\"}", 200);
+        assertThat((String) JsonPath.read(body(reclassified), "$.status")).isEqualTo("ESTIMATE_PENDING");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM support_estimates WHERE request_id = ?::uuid",
+                Integer.class, requestId)).isZero();
+        call(HttpMethod.POST, "/api/v1/support-requests/" + requestId + "/estimate", adminToken,
+                "{\"estimatedHours\":4,\"hourlyRate\":100,\"deliveryTimelineDays\":2,\"explanation\":\"Fix v2\"}", 200);
 
         // Another client cannot approve it; the owner can, and the audit trail records the real user.
         call(HttpMethod.POST, "/api/v1/support-requests/my/" + requestId + "/approve-estimate", clientBToken,
@@ -238,9 +243,9 @@ class BusinessWorkflowIntegrationTest extends AbstractPostgresIntegrationTest {
     private User insertUser(UserRole role, UUID clientId) {
         UUID id = UUID.randomUUID();
         String email = role.name().toLowerCase() + "+" + id + "@example.test";
-        jdbc.update("INSERT INTO users (id, email, normalized_email, password_hash, role, account_status, client_id) "
-                        + "VALUES (?, ?, ?, 'not-a-real-hash', ?, 'ACTIVE', ?)",
-                id, email, email, role.name(), clientId);
+        jdbc.update("INSERT INTO users (id, email, normalized_email, password_hash, role, account_status, client_id, "
+                        + "client_role) VALUES (?, ?, ?, 'not-a-real-hash', ?, 'ACTIVE', ?, ?)",
+                id, email, email, role.name(), clientId, role == UserRole.CLIENT ? "CLIENT_OWNER" : null);
         return new User(id, email, email, "x", role, AccountStatus.ACTIVE, clientId, Instant.now(), Instant.now());
     }
 

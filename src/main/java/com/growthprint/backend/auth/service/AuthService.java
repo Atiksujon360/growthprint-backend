@@ -50,6 +50,12 @@ public class AuthService {
         return user.get();
     }
 
+    /** Stores the last sign-in time (shown in account and user-management screens). */
+    @Transactional
+    public void recordSuccessfulLogin(UUID userId) {
+        userRepository.findById(userId).ifPresent(user -> user.recordLogin(java.time.Instant.now()));
+    }
+
     @Transactional(readOnly = true)
     public User getUserById(UUID userId) {
         return userRepository.findById(userId)

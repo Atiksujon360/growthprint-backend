@@ -2,45 +2,67 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'feature/**', 'fix/**' ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    # Throwaway PostgreSQL for the @PostgresIntegrationTest suite (tenant isolation, migrations, workflows).
+    # It never touches Render: PostgresTestDatabase refuses render.com hosts and isolates each run in its own schema.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: growthprint_ci
+          POSTGRES_USER: growthprint
+          POSTGRES_PASSWORD: growthprint
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U growthprint -d growthprint_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      GP_IT_DATABASE_URL: jdbc:postgresql://localhost:5432/growthprint_ci
+      GP_IT_DATABASE_USERNAME: growthprint
+      GP_IT_DATABASE_PASSWORD: growthprint
+
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up JDK 17
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
+        cache: maven
 
-    - name: Cache Maven packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.m2
-        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-        restore-keys: ${{ runner.os }}-m2
+    - name: Build and run all tests (unit + PostgreSQL integration)
+      run: |
+        chmod +x mvnw
+        ./mvnw -B clean verify
 
-    - name: Build with Maven
-      run: ./mvnw.cmd clean compile
+    # Guard against silent skips: with the PostgreSQL service up, only the 3 SeedDataCommandTest tests
+    # (opt-in, need DATABASE_URL) may be skipped. Any other skip means the database tests did not run.
+    - name: Verify PostgreSQL tests were not skipped
+      if: always()
+      run: |
+        skipped=$(grep -h -o '<testsuite [^>]*skipped="[0-9]*"' target/surefire-reports/TEST-*.xml | grep -o 'skipped="[0-9]*"' | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+        seed=$(grep -h -o '<testsuite [^>]*skipped="[0-9]*"' target/surefire-reports/TEST-*SeedDataCommandTest.xml | grep -o 'skipped="[0-9]*"' | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+        echo "Skipped total: ${skipped:-0}, of which seed tests: ${seed:-0}"
+        if [ "${skipped:-0}" -ne "${seed:-0}" ]; then
+          echo "::error::Database-dependent tests were skipped although PostgreSQL is available"; exit 1
+        fi
 
-    - name: Run unit tests
-      run: ./mvnw.cmd test
-
-    - name: Run integration tests (with Docker)
-      run: ./mvnw.cmd test -Dtest=PostgreSQLIntegrationTest,FlywayMigrationTest,CrmLeadRepositoryIntegrationTest
-      if: false # Disabled until Docker is available in CI
-
-    - name: Build package
-      run: ./mvnw.cmd package
-
-    - name: Upload build artifacts
+    - name: Upload test reports
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: growthprint-backend-jar
-        path: target/*.jar
+        name: surefire-reports
+        path: target/surefire-reports
