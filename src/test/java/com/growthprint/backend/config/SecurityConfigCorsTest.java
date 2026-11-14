@@ -93,6 +93,24 @@ class SecurityConfigCorsTest {
     }
 
     @Test
+    void allowsTheHeadersTheFrontendSendsCaseInsensitively() {
+        var config = SecurityConfig.buildCorsConfiguration(List.of("http://localhost:3000"));
+        assertNotNull(config.checkHeaders(List.of("authorization", "content-type", "accept", "x-correlation-id")));
+        assertEquals(List.of("X-Correlation-ID"), config.getExposedHeaders());
+        assertEquals(Boolean.TRUE, config.getAllowCredentials());
+    }
+
+    @Test
+    void rejectsPreflightForHeadersOutsideTheAllowList() {
+        var config = SecurityConfig.buildCorsConfiguration(List.of("http://localhost:3000"));
+        assertFalse(config.getAllowedHeaders().contains("*"));
+        // Only unknown headers: the preflight is rejected outright.
+        assertNull(config.checkHeaders(List.of("X-Custom-Injected")));
+        // Mixed: the unknown header is left out of Access-Control-Allow-Headers, so the browser blocks the request.
+        assertEquals(List.of("Authorization"), config.checkHeaders(List.of("Authorization", "X-Custom-Injected")));
+    }
+
+    @Test
     void corsConfigurationPreservesHttps() {
         String testOrigins = "https://production.example.com,http://localhost:3000";
         List<String> parsedOrigins = Arrays.stream(testOrigins.split(","))
