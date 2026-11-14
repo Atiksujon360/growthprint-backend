@@ -27,7 +27,7 @@ public class ProposalController {
 
     @GetMapping
     @Operation(summary = "List all proposals")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROPOSALS')")
     public List<ProposalResponse> list() {
         return proposalService.findAll();
     }
@@ -41,28 +41,28 @@ public class ProposalController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get proposal by ID")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROPOSALS')")
     public ProposalResponse getById(@PathVariable UUID id) {
         return proposalService.findById(id);
     }
 
     @PostMapping
     @Operation(summary = "Create a new proposal")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROPOSALS')")
     public ProposalResponse create(@Valid @RequestBody CreateProposalCommand command) {
         return proposalService.create(command);
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Update a draft proposal")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROPOSALS')")
     public ProposalResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateProposalCommand command) {
         return proposalService.update(id, command);
     }
 
     @PostMapping("/{id}/publish")
     @Operation(summary = "Publish a draft proposal for client review")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_PROPOSALS')")
     public ProposalResponse publish(@PathVariable UUID id, @Valid @RequestBody PublishProposalCommand command) {
         return proposalService.publish(id, command);
     }

@@ -24,7 +24,21 @@ import static org.junit.jupiter.api.Assertions.*;
 @Transactional
 @EnabledIfEnvironmentVariable(named = "DATABASE_URL", matches = ".+",
         disabledReason = "Requires a real PostgreSQL database (DATABASE_URL not set)")
+@EnabledIfEnvironmentVariable(named = "GP_ALLOW_SEED_TEST", matches = "true",
+        disabledReason = "Opt-in only: this test runs Flyway and the seed command against DATABASE_URL")
 public class SeedDataCommandTest {
+
+    /**
+     * Runs before the Spring context (and therefore before Flyway) starts. DATABASE_URL is the application's real
+     * database variable, so a developer with production exported must never migrate or seed it from a test run.
+     */
+    @org.junit.jupiter.api.BeforeAll
+    static void refuseSharedDatabases() {
+        String url = String.valueOf(System.getenv("DATABASE_URL")).toLowerCase(java.util.Locale.ROOT);
+        if (url.contains("render.com")) {
+            throw new IllegalStateException("SeedDataCommandTest refuses to run against a Render database");
+        }
+    }
 
     @Autowired
     private SeedDataCommand seedDataCommand;

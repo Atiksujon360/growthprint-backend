@@ -60,6 +60,11 @@ app:
     # Keep it outside the database; losing or changing it means re-entering the provider key.
     credentials-encryption-key: "${AI_CREDENTIALS_ENCRYPTION_KEY:}"
 
+  businesses:
+    # MVP2 M1.1: while MVP1 data is not yet scoped to businesses (M2), only global ADMINs may create businesses.
+    # Do not enable before tenant data migration and tenant-scoped queries are complete.
+    self-service-creation-enabled: false
+
   admin-endpoints:
     # Development-only until server-side authentication and authorization exist.
     enabled: false
@@ -88,6 +93,20 @@ app:
       expiration: 1h
       issuer: growthprint-backend
 
+    account:
+      # Public frontend URL used to build password-reset and invitation links.
+      frontend-base-url: "${FRONTEND_BASE_URL:http://localhost:3000}"
+      # Reset links are single-use and expire after this time.
+      password-reset-ttl: 30m
+      # Invitation (account setup) links expire after this time.
+      invitation-ttl: 72h
+      # Per-account login throttle (in addition to the per-IP limit below).
+      login-max-attempts-per-account: 20
+      login-account-window: 15m
+      # Reset emails per address per window; extra requests get the same generic answer but send nothing.
+      reset-max-requests-per-account: 3
+      reset-account-window: 1h
+
   cors:
     # Allowed CORS origins for frontend (comma-separated)
     # Development: http://localhost:3000
@@ -104,3 +123,7 @@ app:
       # Brute-force protection for POST /api/v1/auth/login (per client IP)
       max-requests: 10
       window: 1m
+    account-recovery:
+      # Shared per-IP limit for forgot/reset password and invitation verify/accept
+      max-requests: 10
+      window: 15m

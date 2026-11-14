@@ -5,6 +5,7 @@ import com.growthprint.backend.client.dto.UpdateClientCommand;
 import com.growthprint.backend.client.entity.Client;
 import com.growthprint.backend.client.exception.ClientNotFoundException;
 import com.growthprint.backend.client.repository.ClientRepository;
+import com.growthprint.backend.client.dto.CreateClientCommand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +16,39 @@ import java.util.UUID;
 public class ClientService {
 
     private final ClientRepository clientRepository;
+
+    /** Creates an ACTIVE client. Used directly (POST /clients) and by lead conversion. */
+    @Transactional
+    public ClientResponse create(CreateClientCommand command, String defaultAccountManager) {
+        com.growthprint.backend.client.entity.Client client = newClient(command, defaultAccountManager,
+                java.time.LocalDate.now(java.time.ZoneOffset.UTC));
+        return ClientResponse.from(clientRepository.save(client));
+    }
+
+    static com.growthprint.backend.client.entity.Client newClient(CreateClientCommand c, String defaultAccountManager,
+                                                                   java.time.LocalDate today) {
+        String name = c.name().trim();
+        return new com.growthprint.backend.client.entity.Client(
+                UUID.randomUUID(),
+                name,
+                blankTo(c.legalName(), name),
+                c.contactEmail().trim(),
+                blankTo(c.phone(), null),
+                blankTo(c.website(), ""),
+                com.growthprint.backend.client.entity.ClientEnums.ClientStatus.ACTIVE,
+                c.retainerTier(),
+                c.monthlyRetainerHours(),
+                c.monthlyRetainerHours() == null ? null : 0,
+                c.contractStartDate() == null ? today : c.contractStartDate(),
+                blankTo(c.accountManager(), defaultAccountManager),
+                c.billingCurrency() == null ? com.growthprint.backend.client.entity.ClientEnums.BillingCurrency.USD
+                        : c.billingCurrency(),
+                blankTo(c.notes(), null));
+    }
+
+    private static String blankTo(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
 
     public ClientService(ClientRepository clientRepository) {
         this.clientRepository = clientRepository;

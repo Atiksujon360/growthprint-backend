@@ -24,7 +24,27 @@ class RateLimitFilterTest {
         loginConfig.setMaxRequests(2);
         loginConfig.setWindow(Duration.ofMinutes(1));
 
-        filter = new RateLimitFilter(new InMemoryRateLimiter(), inquiryConfig, loginConfig);
+        AccountRecoveryRateLimitConfig recoveryConfig = new AccountRecoveryRateLimitConfig();
+        recoveryConfig.setMaxRequests(3);
+        recoveryConfig.setWindow(Duration.ofMinutes(15));
+
+        filter = new RateLimitFilter(new InMemoryRateLimiter(), inquiryConfig, loginConfig, recoveryConfig);
+    }
+
+    @Test
+    void accountRecoveryEndpointsShareOnePerIpBucket() throws Exception {
+        // forgot + verify + reset all count against the same bucket, so they cannot be combined for more tries
+        assertThat(send("POST", "/api/v1/auth/password/forgot", "3.3.3.3").getStatus()).isEqualTo(200);
+        assertThat(send("POST", "/api/v1/auth/password/reset/verify", "3.3.3.3").getStatus()).isEqualTo(200);
+        assertThat(send("POST", "/api/v1/auth/invitations/accept", "3.3.3.3").getStatus()).isEqualTo(200);
+
+        MockHttpServletResponse blocked = send("POST", "/api/v1/auth/password/reset", "3.3.3.3");
+        assertThat(blocked.getStatus()).isEqualTo(429);
+        assertThat(blocked.getHeader("Retry-After")).isEqualTo("900");
+
+        // Separate from the login bucket and from other clients
+        assertThat(send("POST", RateLimitFilter.LOGIN_PATH, "3.3.3.3").getStatus()).isEqualTo(200);
+        assertThat(send("POST", "/api/v1/auth/password/forgot", "4.4.4.4").getStatus()).isEqualTo(200);
     }
 
     private MockHttpServletResponse send(String method, String path, String ip) throws Exception {

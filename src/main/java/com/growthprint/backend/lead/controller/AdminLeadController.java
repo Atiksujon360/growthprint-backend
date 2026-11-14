@@ -25,7 +25,7 @@ public class AdminLeadController {
 
     @GetMapping
     @Operation(summary = "List leads", security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'PERM_CRM')")
     public List<LeadResponse> list() {
         return leadService.findAll();
     }

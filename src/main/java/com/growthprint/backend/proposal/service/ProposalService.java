@@ -38,15 +38,27 @@ public class ProposalService {
     private final ClientRepository clientRepository;
     private final AuthService authService;
     private final ObjectMapper objectMapper;
+    private final java.time.Clock clock;
 
     public ProposalService(ProposalRepository proposalRepository,
                           ClientRepository clientRepository,
                           AuthService authService,
                           ObjectMapper objectMapper) {
+        this(proposalRepository, clientRepository, authService, objectMapper, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ProposalService(ProposalRepository proposalRepository,
+                          ClientRepository clientRepository,
+                          AuthService authService,
+                          ObjectMapper objectMapper,
+                          java.time.Clock clock) {
         this.proposalRepository = proposalRepository;
         this.clientRepository = clientRepository;
         this.authService = authService;
         this.objectMapper = objectMapper;
+        // Expiry is decided on the UTC calendar date; the clock is injectable so tests are not time-zone dependent.
+        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
     }
 
     @Transactional(readOnly = true)
@@ -99,8 +111,8 @@ public class ProposalService {
                 command.validUntil(),
                 ProposalStatus.DRAFT,
                 command.notes(),
-                Instant.now(),
-                Instant.now()
+                clock.instant(),
+                clock.instant()
         );
 
         return toResponse(proposalRepository.save(proposal));
@@ -168,7 +180,7 @@ public class ProposalService {
             throw new IllegalStateException("Proposal is not awaiting client decision");
         }
 
-        if (LocalDate.now(ZoneOffset.UTC).isAfter(proposal.getValidUntil())) {
+        if (LocalDate.now(clock.withZone(ZoneOffset.UTC)).isAfter(proposal.getValidUntil())) {
             proposal.setStatus(ProposalStatus.EXPIRED);
             proposalRepository.save(proposal);
             throw new ProposalExpiredException();
@@ -177,11 +189,11 @@ public class ProposalService {
         String decision = command.decision().trim().toUpperCase(Locale.ROOT);
         if ("ACCEPT".equals(decision)) {
             proposal.setStatus(ProposalStatus.ACCEPTED);
-            proposal.setAcceptedAt(Instant.now());
+            proposal.setAcceptedAt(clock.instant());
             proposal.setAcceptedBy(user.getEmail());
         } else if ("DECLINE".equals(decision)) {
             proposal.setStatus(ProposalStatus.DECLINED);
-            proposal.setDeclinedAt(Instant.now());
+            proposal.setDeclinedAt(clock.instant());
             proposal.setDeclinedBy(user.getEmail());
         } else {
             throw new IllegalArgumentException("Invalid decision. Allowed values: ACCEPT, DECLINE");

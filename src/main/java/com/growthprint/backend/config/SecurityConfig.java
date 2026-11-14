@@ -1,6 +1,11 @@
 package com.growthprint.backend.config;
 
+import com.growthprint.backend.auth.entity.TeamModule;
 import com.growthprint.backend.security.JwtAccessDeniedHandler;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.web.header.writers.DelegatingRequestMatcherHeaderWriter;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import com.growthprint.backend.security.JwtAuthenticationEntryPoint;
 import com.growthprint.backend.security.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +33,8 @@ import java.util.List;
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
+
+    private static final String ADMIN = "ROLE_ADMIN";
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
@@ -91,7 +98,17 @@ public class SecurityConfig {
                 // ambiguous because Spring MVC's HandlerMappingIntrospector is also a CorsConfigurationSource.
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .headers(headers -> headers
-                        .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER)))
+                        .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER))
+                        .frameOptions(frame -> frame.deny())
+                        // JSON API responses never need to load or frame anything. Scoped to /api/** so the
+                        // optional Swagger UI keeps working.
+                        .addHeaderWriter(new DelegatingRequestMatcherHeaderWriter(
+                                PathPatternRequestMatcher.withDefaults().matcher("/api/**"),
+                                new StaticHeadersWriter("Content-Security-Policy",
+                                        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")))
+                        .addHeaderWriter(new StaticHeadersWriter("Permissions-Policy",
+                                "camera=(), microphone=(), geolocation=(), payment=()"))
+                        .addHeaderWriter(new StaticHeadersWriter("Cross-Origin-Opener-Policy", "same-origin")))
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                         .accessDeniedHandler(jwtAccessDeniedHandler))
@@ -101,12 +118,27 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/public/inquiries").permitAll()
                         .requestMatchers("/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/auth/logout").permitAll()
+                        // Account recovery + invitations (rate limited per IP in RateLimitFilter)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/password/policy").permitAll()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/auth/password/forgot",
+                                "/api/v1/auth/password/reset",
+                                "/api/v1/auth/password/reset/verify",
+                                "/api/v1/auth/invitations/preview",
+                                "/api/v1/auth/invitations/accept").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/actuator/info").permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
                         // Authenticated endpoints
                         .requestMatchers("/api/v1/auth/me").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/password").authenticated()
+                        // Self-service account settings: always the caller's own account
+                        .requestMatchers("/api/v1/account/**").authenticated()
+                        // Businesses (tenants): authentication here; membership and role are checked per business
+                        // in BusinessAccessService (non-members get 404).
+                        .requestMatchers("/api/v1/businesses", "/api/v1/businesses/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/business-invitations/accept").authenticated()
 
                         // Client-specific endpoints - require CLIENT role with server-side ownership validation
                         .requestMatchers("/api/v1/support-requests/my/**").hasRole("CLIENT")
@@ -116,17 +148,24 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/projects/my").hasRole("CLIENT")
                         .requestMatchers("/api/v1/proposals/my/**").hasRole("CLIENT")
 
-                        // Admin-only endpoints
-                        .requestMatchers("/api/v1/clients/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/leads/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/crm-leads/**").hasRole("ADMIN")
+                        // Internal modules: ADMIN, or a TEAM_MEMBER the admin granted that module to.
+                        // Authorities come from the database on every request (AccountSessionService),
+                        // so revoking a permission takes effect immediately.
+                        .requestMatchers("/api/v1/clients/**").hasAnyAuthority(ADMIN, TeamModule.CLIENTS.authority())
+                        .requestMatchers("/api/v1/leads/**").hasAnyAuthority(ADMIN, TeamModule.CRM.authority())
+                        .requestMatchers("/api/v1/crm-leads/**").hasAnyAuthority(ADMIN, TeamModule.CRM.authority())
+                        // Finance stays ADMIN-only (not grantable to team members)
                         .requestMatchers("/api/v1/invoices/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/support-requests/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/projects/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/outreach/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/proposals/**").hasRole("ADMIN")
+                        // AI triage spends provider credits: ADMIN only (must precede support-requests/**)
+                        .requestMatchers("/api/v1/support-requests/*/ai/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/support-requests/**").hasAnyAuthority(ADMIN, TeamModule.SUPPORT.authority())
+                        .requestMatchers("/api/v1/projects/**").hasAnyAuthority(ADMIN, TeamModule.PROJECTS.authority())
+                        .requestMatchers("/api/v1/outreach/**").hasAnyAuthority(ADMIN, TeamModule.OUTREACH.authority())
+                        .requestMatchers("/api/v1/proposals/**").hasAnyAuthority(ADMIN, TeamModule.PROPOSALS.authority())
                         // AI provider settings (keys, models, limits) — admin only
                         .requestMatchers("/api/v1/admin/ai/**").hasRole("ADMIN")
+                        // User, staff, permission management and security overview — admin only
+                        .requestMatchers("/api/v1/admin/users/**", "/api/v1/admin/security/**").hasRole("ADMIN")
 
                         // Development-only seed endpoint - requires ADMIN role and dev profile
                         // Note: Only active when spring.profiles.active includes "dev" or "development"

@@ -584,6 +584,54 @@ resets the request to `ESTIMATE_PENDING` (or `READY_TO_START` for included suppo
 
 ---
 
+## Decision 17: Revoke JWTs with a per-user token version, checked on every request
+
+**Date:** 2026-11-02 (V20 approved by the founder)
+**Status:** Accepted
+
+**Context:** JWTs were stateless; disabling an account or changing a password left old tokens valid until expiry.
+**Decision:** `users.token_version` is embedded in every token (`ver`). `JwtAuthenticationFilter` loads the user per
+request (`AccountSessionService`) and accepts the token only if the account is ACTIVE, the role matches and the version
+matches. Authorities (incl. team-member module permissions) come from the database.
+**Consequences:** immediate revocation for password change/reset, sign-out-everywhere, suspension and role/permission
+changes; one indexed query per authenticated request; no refresh-token infrastructure needed yet.
+**Revisit when:** request volume makes the lookup significant (add a short cache) or refresh tokens are introduced.
+
+---
+
+## Decision 18: Pluggable account email sender, no mail dependency yet
+
+**Date:** 2026-11-02 (founder chose "no dependency")
+**Status:** Accepted
+
+**Decision:** password-reset delivery goes through the `AccountEmailSender` interface. The default implementation sends
+nothing and logs a warning without the link. Admins can issue one-time reset links from the studio meanwhile.
+**Revisit when:** an email provider is chosen (needs approval for the dependency and credentials).
+
+---
+
+## Decision 19: TEAM_MEMBER staff role with module permissions
+
+**Date:** 2026-11-02 (founder approved implementing TEAM_MEMBER)
+**Status:** Accepted
+
+**Decision:** implement the V17 role. Grantable modules: CRM, CLIENTS, PROJECTS, SUPPORT, PROPOSALS, OUTREACH. Finance,
+AI and user management remain ADMIN-only. Only ADMINs manage users; nobody can change their own role or status; the last
+active ADMIN is protected. Per-client scoping (`client_assignments`) is **not** enforced yet (documented risk).
+
+---
+
+## Decision 20: Distinct frontend paths for internal areas
+
+**Date:** 2026-11-02 (founder chose `/studio/ops` and `/client-hub`)
+**Status:** Accepted
+
+**Decision:** studio (ADMIN, TEAM_MEMBER) at `/studio/ops`, client workspace at `/client-hub`. Old `/portal/*` URLs
+308-redirect; old `/admin/*` return 404 without a redirect. Paths are not a security control; the backend authorizes
+every API call.
+
+---
+
 ## Future Decisions
 
 ### Pending Decision: Caching Strategy

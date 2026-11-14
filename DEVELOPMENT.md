@@ -3,7 +3,9 @@
 ## Prerequisites
 
 **Required Software:**
-- Java 17 or later (project targets Java 17; Spring Boot 4.1.1 supports Java 17-26)
+- **JDK 21** (`pom.xml` sets `java.version` 21). If your default `JAVA_HOME` is JDK 17, Maven fails with
+  "class file version 65.0". On Windows: `$env:JAVA_HOME="$HOME\.jdks\ms-21.0.12.1"; .\mvnw.cmd clean test`.
+  Use `clean test`: an IDE that auto-builds into `target/` (Eclipse compiler) can otherwise leave stale classes.
 - Maven Wrapper (`mvnw.cmd` on Windows or `./mvnw` on Unix-like systems)
 - PostgreSQL for database-backed application startup
 - Git for version control

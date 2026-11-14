@@ -352,7 +352,7 @@ class ProposalServiceTest {
         @Test
         void recordDecision_shouldThrowWhenExpired() {
                 testProposal.setStatus(ProposalStatus.SENT_FOR_REVIEW);
-                testProposal.setValidUntil(LocalDate.now().minusDays(1)); // Expired
+                testProposal.setValidUntil(LocalDate.now(java.time.ZoneOffset.UTC).minusDays(1)); // Expired (service uses the UTC date)
                 ProposalDecisionCommand command = new ProposalDecisionCommand("ACCEPT", "Accepted");
 
                 when(proposalRepository.findById(testProposal.getId())).thenReturn(Optional.of(testProposal));
