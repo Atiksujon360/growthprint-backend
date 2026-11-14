@@ -13,6 +13,13 @@ spring:
       hibernate:
         format_sql: true
 
+# Swagger UI and API docs stay available for local development (off by default elsewhere, R6).
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:true}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:true}
+
 logging:
   level:
     com.growthprint.backend: DEBUG

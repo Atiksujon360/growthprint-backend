@@ -8,6 +8,14 @@ spring:
     username: "${DATABASE_USERNAME:}"
     password: "${DATABASE_PASSWORD:}"
     driver-class-name: org.postgresql.Driver
+    # Explicit connection pool (production hardening R12). Defaults suit a small managed PostgreSQL plan;
+    # raise DB_POOL_MAX_SIZE only within the database plan's connection limit (every instance opens its own pool).
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30s
+      idle-timeout: 10m
+      max-lifetime: 30m
 
   jpa:
     hibernate:
@@ -20,13 +28,13 @@ spring:
     locations: classpath:db/migration
 
 springdoc:
-  # API docs / Swagger UI stay on by default for backwards compatibility.
-  # Set SPRINGDOC_ENABLED=false in staging/production (see DEPLOYMENT.md).
+  # API docs / Swagger UI are OFF unless SPRINGDOC_ENABLED=true (production hardening R6, SECURITY-AUDIT S6).
+  # The dev profile turns them on for local work; never set SPRINGDOC_ENABLED=true in production.
   api-docs:
-    enabled: ${SPRINGDOC_ENABLED:true}
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
   swagger-ui:
-    enabled: ${SPRINGDOC_ENABLED:true}
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /swagger-ui.html
   openapi:
     info:
@@ -42,6 +50,16 @@ management:
   endpoint:
     health:
       show-details: never
+      # Liveness and readiness probes (production hardening R8):
+      #   /actuator/health/liveness  - the process is up (no external checks, so a DB outage never restarts it)
+      #   /actuator/health/readiness - ready for traffic, including the database
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
 
 server:
   port: 8090

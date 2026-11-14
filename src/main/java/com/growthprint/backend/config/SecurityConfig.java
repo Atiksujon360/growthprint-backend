@@ -56,17 +56,27 @@ public class SecurityConfig {
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", buildCorsConfiguration(parseAllowedOrigins(corsAllowedOrigins)));
+        return source;
+    }
+
+    /**
+     * Request headers a browser may send cross-origin. Explicit list instead of "*" (production hardening R12,
+     * SECURITY-AUDIT S12): the frontend only sends these. Add a header here before the frontend starts sending it.
+     */
+    static final List<String> CORS_ALLOWED_HEADERS =
+            List.of("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Correlation-ID");
+
+    static CorsConfiguration buildCorsConfiguration(List<String> allowedOrigins) {
         CorsConfiguration corsConfiguration = new CorsConfiguration();
-        corsConfiguration.setAllowedOrigins(parseAllowedOrigins(corsAllowedOrigins));
+        corsConfiguration.setAllowedOrigins(allowedOrigins);
         corsConfiguration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        corsConfiguration.setAllowedHeaders(List.of("*"));
+        corsConfiguration.setAllowedHeaders(CORS_ALLOWED_HEADERS);
         corsConfiguration.setExposedHeaders(List.of("X-Correlation-ID"));
         corsConfiguration.setAllowCredentials(true);
         corsConfiguration.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", corsConfiguration);
-        return source;
+        return corsConfiguration;
     }
 
     /**
