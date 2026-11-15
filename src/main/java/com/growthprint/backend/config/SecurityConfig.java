@@ -137,6 +137,8 @@ public class SecurityConfig {
                                 "/api/v1/auth/invitations/preview",
                                 "/api/v1/auth/invitations/accept").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // Kubernetes-style probes (R8): status only, details are never shown.
+                        .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                         .requestMatchers("/actuator/info").permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
 

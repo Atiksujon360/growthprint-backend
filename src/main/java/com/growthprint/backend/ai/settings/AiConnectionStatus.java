@@ -7,6 +7,7 @@ public enum AiConnectionStatus {
     AI_DISABLED,
     NOT_CONFIGURED,
     KEY_MISSING,
+    KEY_UNREADABLE,
     NOT_TESTED,
     CONNECTED,
     INVALID_CREDENTIALS,
@@ -24,6 +25,7 @@ public enum AiConnectionStatus {
             case TIMEOUT -> TIMEOUT;
             case PROVIDER_UNAVAILABLE -> PROVIDER_UNAVAILABLE;
             case KEY_MISSING, ENCRYPTION_KEY_MISSING -> KEY_MISSING;
+            case KEY_UNREADABLE -> KEY_UNREADABLE;
             case NOT_CONFIGURED -> NOT_CONFIGURED;
             default -> PROVIDER_ERROR;
         };

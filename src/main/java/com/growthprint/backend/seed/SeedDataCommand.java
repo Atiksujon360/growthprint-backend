@@ -64,6 +64,10 @@ public class SeedDataCommand implements CommandLineRunner {
     private final OutreachDraftRepository outreachDraftRepository;
     private final PasswordEncoder passwordEncoder;
 
+    /** Where the generated seed passwords are written (git-ignored). Override to protect an existing file. */
+    @org.springframework.beans.factory.annotation.Value("${app.seed.credentials-file:.dev-credentials}")
+    private String credentialsFilePath = ".dev-credentials";
+
     public SeedDataCommand(UserRepository userRepository,
                            ClientRepository clientRepository,
                            ProjectRepository projectRepository,
@@ -110,9 +114,13 @@ public class SeedDataCommand implements CommandLineRunner {
         Client clientB = createClientB();
 
         // Create users
-        createAdminUser();
-        createClientUser(clientA.getId(), "clienta@growthprint.dev", "ClientA123!");
-        createClientUser(clientB.getId(), "clientb@growthprint.dev", "ClientB123!");
+        // Passwords are random per run and never logged: they are written only to the git-ignored credentials file.
+        String adminPassword = SeedCredentials.randomPassword();
+        String clientAPassword = SeedCredentials.randomPassword();
+        String clientBPassword = SeedCredentials.randomPassword();
+        createAdminUser(adminPassword);
+        createClientUser(clientA.getId(), "clienta@growthprint.dev", clientAPassword);
+        createClientUser(clientB.getId(), "clientb@growthprint.dev", clientBPassword);
 
         // Create CRM leads
         CrmLead lead1 = createCrmLead1();
@@ -142,10 +150,14 @@ public class SeedDataCommand implements CommandLineRunner {
         createOutreachDraft(lead3.getId());
 
         logger.info("Seed data completed successfully.");
-        logger.info("Test accounts created:");
-        logger.info("  - Admin: admin@growthprint.dev / Admin123!");
-        logger.info("  - Client A: clienta@growthprint.dev / ClientA123! (Client ID: {})", clientA.getId());
-        logger.info("  - Client B: clientb@growthprint.dev / ClientB123! (Client ID: {})", clientB.getId());
+        java.nio.file.Path credentialsFile = SeedCredentials.write(java.nio.file.Path.of(credentialsFilePath), java.util.Map.of(
+                "ADMIN_EMAIL", "admin@growthprint.dev", "ADMIN_PASSWORD", adminPassword,
+                "CLIENT_A_EMAIL", "clienta@growthprint.dev", "CLIENT_A_PASSWORD", clientAPassword,
+                "CLIENT_A_ID", clientA.getId().toString(),
+                "CLIENT_B_EMAIL", "clientb@growthprint.dev", "CLIENT_B_PASSWORD", clientBPassword,
+                "CLIENT_B_ID", clientB.getId().toString()));
+        logger.info("Test accounts created (admin, client A, client B). Passwords were written to {} (git-ignored); "
+                + "they are not logged.", credentialsFile.toAbsolutePath());
     }
 
     private Client createClientA() {
@@ -188,12 +200,12 @@ public class SeedDataCommand implements CommandLineRunner {
         return clientRepository.save(client);
     }
 
-    private User createAdminUser() {
+    private User createAdminUser(String password) {
         User user = new User(
             UUID.randomUUID(),
             "admin@growthprint.dev",
             "admin@growthprint.dev",
-            passwordEncoder.encode("Admin123!"),
+            passwordEncoder.encode(password),
             UserRole.ADMIN,
             AccountStatus.ACTIVE,
             null,

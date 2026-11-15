@@ -77,11 +77,20 @@ app:
     # Generate with: openssl rand -base64 32.  Without it, AI keys cannot be saved (the rest of the app works).
     # Keep it outside the database; losing or changing it means re-entering the provider key.
     credentials-encryption-key: "${AI_CREDENTIALS_ENCRYPTION_KEY:}"
+    # Custom OpenAI-compatible endpoints must be public https addresses. Only development may allow localhost / private
+    # addresses (the dev profile sets this true); never enable it in production.
+    allow-local-endpoints: "${AI_ALLOW_LOCAL_ENDPOINTS:false}"
 
   businesses:
     # MVP2 M1.1: while MVP1 data is not yet scoped to businesses (M2), only global ADMINs may create businesses.
     # Do not enable before tenant data migration and tenant-scoped queries are complete.
     self-service-creation-enabled: false
+
+  bootstrap:
+    # First-admin bootstrap. Set BOTH for one start-up on a database with no active admin, sign in, then REMOVE the
+    # password variable. Ignored when an active admin already exists. The password must meet the password policy.
+    admin-email: "${BOOTSTRAP_ADMIN_EMAIL:}"
+    admin-password: "${BOOTSTRAP_ADMIN_PASSWORD:}"
 
   admin-endpoints:
     # Development-only until server-side authentication and authorization exist.

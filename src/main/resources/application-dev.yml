@@ -13,6 +13,11 @@ spring:
       hibernate:
         format_sql: true
 
+app:
+  ai:
+    # Lets the custom AI endpoint point at a local model server (Ollama, LM Studio). Development only.
+    allow-local-endpoints: true
+
 # Swagger UI and API docs stay available for local development (off by default elsewhere, R6).
 springdoc:
   api-docs:

@@ -33,13 +33,18 @@ public class AiProviderAdapters {
     private final ObjectMapper json;
     private final Map<AiProviderType.ApiFormat, ProviderAdapter> adapters = new EnumMap<>(AiProviderType.ApiFormat.class);
     private final HttpClient http;
+    private final AiEndpointGuard endpointGuard;
 
-    public AiProviderAdapters(ObjectMapper json) {
+    public AiProviderAdapters(ObjectMapper json, AiEndpointGuard endpointGuard) {
         this.json = json;
+        this.endpointGuard = endpointGuard;
         adapters.put(AiProviderType.ApiFormat.OPENAI_CHAT, new OpenAiChatAdapter(json));
         adapters.put(AiProviderType.ApiFormat.GEMINI, new GeminiAdapter(json));
         adapters.put(AiProviderType.ApiFormat.ANTHROPIC, new AnthropicAdapter(json));
-        this.http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
+        this.http = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .connectTimeout(java.time.Duration.ofSeconds(10))
+                .build();
     }
 
     public AiCompletion complete(ProviderConnection connection, AiRequest request) {
@@ -55,6 +60,10 @@ public class AiProviderAdapters {
     }
 
     private JsonNode execute(ProviderConnection connection, ProviderAdapter.HttpCall call) {
+        if (connection.type().requiresCustomBaseUrl()) {
+            // Re-checked on every call, not only when settings were saved (the host's DNS may have changed since).
+            endpointGuard.requireAllowedForCall(call.uri());
+        }
         HttpRequest.Builder builder = HttpRequest.newBuilder(call.uri())
                 .timeout(connection.timeout())
                 .header("Accept", "application/json");

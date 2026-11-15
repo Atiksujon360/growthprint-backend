@@ -8,7 +8,8 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Admin update of the AI configuration (the API key is set separately and is write-only).
- * Changing the provider removes the saved key, because a key belongs to one provider.
+ * Changing the provider, or the endpoint of the custom provider, removes the saved key (a key belongs to one provider
+ * and host), so the request must set {@code confirmKeyReset} when a key would be discarded.
  */
 public record UpdateAiSettingsCommand(
         boolean enabled,
@@ -26,6 +27,18 @@ public record UpdateAiSettingsCommand(
         int maxOutputTokens,
         @Min(value = 1, message = "Daily limit must be at least 1")
         @Max(value = 10000, message = "Daily limit must be at most 10000")
-        int dailyRequestLimitPerUser
+        int dailyRequestLimitPerUser,
+        Boolean confirmKeyReset
 ) {
+
+    /** Without key-reset confirmation (the common case). */
+    public UpdateAiSettingsCommand(boolean enabled, AiProviderType provider, String model, String baseUrl, int timeoutSeconds,
+                                   int maxOutputTokens, int dailyRequestLimitPerUser) {
+        this(enabled, provider, model, baseUrl, timeoutSeconds, maxOutputTokens, dailyRequestLimitPerUser, null);
+    }
+
+    /** True only when the admin explicitly agreed to discard the saved API key. */
+    public boolean keyResetConfirmed() {
+        return Boolean.TRUE.equals(confirmKeyReset);
+    }
 }

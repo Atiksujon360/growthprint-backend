@@ -116,7 +116,7 @@ public class AiSettings {
         touch(adminId, now);
     }
 
-    void recordTest(AiConnectionStatus status, String message, Instant now) {
+    public void recordTest(AiConnectionStatus status, String message, Instant now) {
         this.lastTestStatus = status;
         this.lastTestMessage = message;
         this.lastTestAt = now;

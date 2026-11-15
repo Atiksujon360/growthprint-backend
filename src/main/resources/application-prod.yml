@@ -1,0 +1,23 @@
+# Production profile (production hardening R8). Activate with SPRING_PROFILES_ACTIVE=prod.
+# Safe to commit: no secrets here; credentials still come from environment variables.
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+logging:
+  # One JSON object per line (Elastic Common Schema) so the host's log search can filter by level, logger and
+  # the X-Correlation-ID that the request filter puts in the MDC.
+  structured:
+    format:
+      console: ecs
+  level:
+    root: INFO
+    com.growthprint.backend: INFO
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

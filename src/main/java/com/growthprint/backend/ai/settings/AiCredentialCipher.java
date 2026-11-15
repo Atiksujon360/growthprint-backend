@@ -33,11 +33,35 @@ public class AiCredentialCipher {
         }
     }
 
+    /** NOT_SET: no value. INVALID: a value that is not base64 of exactly 32 bytes (treated as unusable). */
+    public enum KeyStatus { CONFIGURED, NOT_SET, INVALID }
+
     private final SecretKey key;
+    private final KeyStatus keyStatus;
     private final SecureRandom random = new SecureRandom();
 
     public AiCredentialCipher(@Value("${app.ai.credentials-encryption-key:}") String base64Key) {
         this.key = parseKey(base64Key);
+        this.keyStatus = key != null ? KeyStatus.CONFIGURED
+                : (base64Key == null || base64Key.isBlank() ? KeyStatus.NOT_SET : KeyStatus.INVALID);
+    }
+
+    /** Why the server cannot encrypt, if it cannot. A malformed key is no longer indistinguishable from a missing one. */
+    public KeyStatus keyStatus() {
+        return keyStatus;
+    }
+
+    /** True when the stored value can be decrypted with the current server key. */
+    public boolean canDecrypt(EncryptedSecret secret) {
+        if (key == null) {
+            return false;
+        }
+        try {
+            decrypt(secret);
+            return true;
+        } catch (AiException e) {
+            return false;
+        }
     }
 
     public boolean isConfigured() {
@@ -66,7 +90,7 @@ public class AiCredentialCipher {
             return new String(cipher.doFinal(Base64.getDecoder().decode(secret.ciphertext())), StandardCharsets.UTF_8);
         } catch (GeneralSecurityException | IllegalArgumentException e) {
             // Wrong encryption key (rotated?) or tampered value: the admin must enter the key again.
-            throw new AiException(AiErrorCode.KEY_MISSING, e);
+            throw new AiException(AiErrorCode.KEY_UNREADABLE, e);
         }
     }
 
