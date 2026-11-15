@@ -25,7 +25,7 @@ class AiProviderAdaptersTest {
 
     private static final String KEY = "sk-test-not-a-real-key-123456";
     private final ObjectMapper json = new ObjectMapper();
-    private final AiProviderAdapters adapters = new AiProviderAdapters(json);
+    private final AiProviderAdapters adapters = new AiProviderAdapters(json, TestEndpointGuards.allowLocal());
     private final AiRequest request = new AiRequest("You are careful.", "Classify this.", true, 300);
 
     private ProviderConnection connection(AiProviderType type, FakeProviderServer server, String model) {

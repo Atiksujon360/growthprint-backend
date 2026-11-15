@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,7 +44,7 @@ class AiSettingsAndServiceTest {
     private final AiSettingsRepository settingsRepository = mock(AiSettingsRepository.class);
     private final AiUsageRepository usageRepository = mock(AiUsageRepository.class);
     private final AiCredentialCipher cipher = new AiCredentialCipher(AiCredentialCipherTest.randomKey());
-    private final AiProviderAdapters adapters = new AiProviderAdapters(new ObjectMapper());
+    private final AiProviderAdapters adapters = new AiProviderAdapters(new ObjectMapper(), TestEndpointGuards.allowLocal());
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-01T12:00:00Z"), ZoneOffset.UTC);
 
     private AiSettings stored;
@@ -55,7 +56,8 @@ class AiSettingsAndServiceTest {
         stored = AiSettings.defaults();
         when(settingsRepository.findById(AiSettings.SINGLETON_ID)).thenAnswer(i -> Optional.of(stored));
         when(settingsRepository.save(any(AiSettings.class))).thenAnswer(i -> stored = i.getArgument(0));
-        settingsService = new AiSettingsService(settingsRepository, cipher, adapters, clock);
+        when(usageRepository.save(any(AiUsageRecord.class))).thenAnswer(i -> i.getArgument(0));
+        settingsService = new AiSettingsService(settingsRepository, cipher, adapters, clock, TestEndpointGuards.allowLocal());
         aiService = new AiService(settingsService, adapters, usageRepository, clock);
     }
 
@@ -87,10 +89,79 @@ class AiSettingsAndServiceTest {
         settingsService.setApiKey(KEY, ADMIN);
 
         AiSettingsView view = settingsService.update(
-                new UpdateAiSettingsCommand(false, AiProviderType.GEMINI, "gemini-test", null, 30, 800, 50), ADMIN);
+                new UpdateAiSettingsCommand(false, AiProviderType.GEMINI, "gemini-test", null, 30, 800, 50, true), ADMIN);
 
         assertThat(view.apiKeyConfigured()).isFalse();
         assertThat(stored.getApiKeyCiphertext()).isNull();
+    }
+
+    @Test
+    void discardingTheSavedKeyNeedsExplicitConfirmation() {
+        settingsService.update(new UpdateAiSettingsCommand(false, AiProviderType.OPENAI, "gpt-test", null, 30, 800, 50), ADMIN);
+        settingsService.setApiKey(KEY, ADMIN);
+
+        assertThatThrownBy(() -> settingsService.update(
+                new UpdateAiSettingsCommand(false, AiProviderType.GEMINI, "gemini-test", null, 30, 800, 50), ADMIN))
+                .isInstanceOfSatisfying(AiException.class,
+                        e -> assertThat(e.code()).isEqualTo(AiErrorCode.KEY_RESET_NOT_CONFIRMED));
+        assertThat(stored.getApiKeyCiphertext()).as("the key must survive a refused change").isNotNull();
+    }
+
+    @Test
+    void changingOnlyTheCustomEndpointAlsoDiscardsTheKeyWithConfirmation() {
+        settingsService.update(new UpdateAiSettingsCommand(
+                false, AiProviderType.OPENAI_COMPATIBLE, "m", "https://one.example.com/v1", 30, 800, 50), ADMIN);
+        settingsService.setApiKey(KEY, ADMIN);
+
+        assertThatThrownBy(() -> settingsService.update(new UpdateAiSettingsCommand(
+                false, AiProviderType.OPENAI_COMPATIBLE, "m", "https://two.example.com/v1", 30, 800, 50), ADMIN))
+                .isInstanceOfSatisfying(AiException.class,
+                        e -> assertThat(e.code()).isEqualTo(AiErrorCode.KEY_RESET_NOT_CONFIRMED));
+
+        AiSettingsView view = settingsService.update(new UpdateAiSettingsCommand(
+                false, AiProviderType.OPENAI_COMPATIBLE, "m", "https://two.example.com/v1", 30, 800, 50, true), ADMIN);
+        assertThat(view.apiKeyConfigured()).isFalse();
+    }
+
+    @Test
+    void aiCannotBeSwitchedOnBeforeASuccessfulConnectionTest() {
+        settingsService.update(new UpdateAiSettingsCommand(false, AiProviderType.OPENAI, "gpt-test", null, 30, 800, 50), ADMIN);
+        settingsService.setApiKey(KEY, ADMIN);
+
+        assertThatThrownBy(() -> settingsService.update(
+                new UpdateAiSettingsCommand(true, AiProviderType.OPENAI, "gpt-test", null, 30, 800, 50), ADMIN))
+                .isInstanceOfSatisfying(AiException.class,
+                        e -> assertThat(e.code()).isEqualTo(AiErrorCode.CONNECTION_NOT_TESTED));
+    }
+
+    @Test
+    void changingTheModelClearsThePassedTestSoAiMustBeTestedAgain() {
+        settingsService.update(new UpdateAiSettingsCommand(false, AiProviderType.OPENAI, "gpt-a", null, 30, 800, 50), ADMIN);
+        settingsService.setApiKey(KEY, ADMIN);
+        stored.recordTest(AiConnectionStatus.CONNECTED, "ok", clock.instant());
+        settingsService.update(new UpdateAiSettingsCommand(true, AiProviderType.OPENAI, "gpt-a", null, 30, 800, 50), ADMIN);
+
+        assertThatThrownBy(() -> settingsService.update(
+                new UpdateAiSettingsCommand(true, AiProviderType.OPENAI, "gpt-b", null, 30, 800, 50), ADMIN))
+                .isInstanceOfSatisfying(AiException.class,
+                        e -> assertThat(e.code()).isEqualTo(AiErrorCode.CONNECTION_NOT_TESTED));
+    }
+
+    @Test
+    void aKeyEncryptedWithAnotherServerKeyIsReportedAsUnreadableNotMissing() {
+        settingsService.update(new UpdateAiSettingsCommand(false, AiProviderType.OPENAI, "gpt-test", null, 30, 800, 50), ADMIN);
+        settingsService.setApiKey(KEY, ADMIN);
+
+        AiCredentialCipher rotated = new AiCredentialCipher(AiCredentialCipherTest.randomKey());
+        AiSettingsService afterRotation = new AiSettingsService(settingsRepository, rotated, adapters, clock,
+                TestEndpointGuards.allowLocal());
+
+        AiSettingsView view = afterRotation.get();
+        assertThat(view.keyUnreadable()).isTrue();
+        assertThat(view.status()).isEqualTo(AiConnectionStatus.KEY_UNREADABLE);
+        assertThatThrownBy(() -> afterRotation.testConnection(ADMIN))
+                .isInstanceOfSatisfying(AiException.class, e -> assertThat(e.code()).isEqualTo(AiErrorCode.KEY_UNREADABLE));
+        assertThat(settingsService.get().keyUnreadable()).isFalse();
     }
 
     @Test
@@ -155,7 +226,7 @@ class AiSettingsAndServiceTest {
             aiService.complete("support_triage", ADMIN, new AiRequest("system", "SECRET CUSTOMER TEXT", true, 100));
 
             ArgumentCaptor<AiUsageRecord> usage = ArgumentCaptor.forClass(AiUsageRecord.class);
-            verify(usageRepository).save(usage.capture());
+            verify(usageRepository, atLeastOnce()).save(usage.capture());
             AiUsageRecord record = usage.getValue();
             assertThat(record.getOutcome()).isEqualTo("SUCCESS");
             assertThat(record.getInputTokens()).isEqualTo(11);
@@ -169,7 +240,7 @@ class AiSettingsAndServiceTest {
     void dailyLimitPerUserIsEnforcedBeforeCallingTheProvider() throws Exception {
         try (FakeProviderServer server = new FakeProviderServer(FakeProviderServer.Reply.ok("{}"))) {
             enableWith(server);
-            when(usageRepository.countByUserIdAndCreatedAtGreaterThanEqual(eq(ADMIN), any())).thenReturn(50L);
+            when(usageRepository.countTowardsLimit(eq(ADMIN), any(), any())).thenReturn(50L);
 
             assertThatThrownBy(() -> aiService.complete("support_triage", ADMIN, new AiRequest("s", "u", true, 100)))
                     .isInstanceOfSatisfying(AiException.class, e -> assertThat(e.code()).isEqualTo(AiErrorCode.USAGE_LIMIT_REACHED));
@@ -185,7 +256,7 @@ class AiSettingsAndServiceTest {
                     .isInstanceOf(AiException.class);
 
             ArgumentCaptor<AiUsageRecord> usage = ArgumentCaptor.forClass(AiUsageRecord.class);
-            verify(usageRepository).save(usage.capture());
+            verify(usageRepository, atLeastOnce()).save(usage.capture());
             assertThat(usage.getValue().getOutcome()).isEqualTo("INVALID_CREDENTIALS");
         }
     }
@@ -194,6 +265,8 @@ class AiSettingsAndServiceTest {
         settingsService.update(new UpdateAiSettingsCommand(
                 false, AiProviderType.OPENAI_COMPATIBLE, "m", server.baseUrl(), 5, 800, 50), ADMIN);
         settingsService.setApiKey(KEY, ADMIN);
+        // AI can only be switched on after a passing connection test; record one without calling the fake server.
+        stored.recordTest(AiConnectionStatus.CONNECTED, "Connected successfully.", clock.instant());
         settingsService.update(new UpdateAiSettingsCommand(
                 true, AiProviderType.OPENAI_COMPATIBLE, "m", server.baseUrl(), 5, 800, 50), ADMIN);
     }

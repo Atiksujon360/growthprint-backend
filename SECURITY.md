@@ -56,7 +56,7 @@ Adding the dependency and credentials requires the founder's approval.
 - Per-request account lookup adds one indexed query per authenticated request.
 - Reset requests for known vs unknown emails do slightly different work (DB insert); response bodies and status are
   identical, timing is not strictly equalised.
-- The seed account noted below still applies.
+- The development seed no longer uses fixed passwords (see below); accounts created by older versions may still exist on a database that was seeded then.
 
 ## Security Hardening Log (2026-11-01)
 
@@ -82,9 +82,13 @@ Adding the dependency and credentials requires the founder's approval.
 | Duplicate/constraint violations return 409 with a generic message (SQL never returned) | Information leakage, misleading 500s |
 | PostgreSQL test harness refuses `render.com` hosts and overrides `DATABASE_URL` | `.env` points at the shared Render DB; tests must never migrate it |
 
-**Open security items (documented, not changed):** seed account `admin@growthprint.dev` with a password that is
-in the repo (`SeedDataCommand`, `seed` profile) - verify it does not exist on Render and rotate if it does;
-JWTs stay valid up to 1 h after an account is disabled; the in-memory rate limiter is per instance.
+**Seed and first admin (changed 2026-11-15):** `SeedDataCommand` (`seed` profile, development only) now generates random passwords
+and writes them only to the git-ignored `.dev-credentials`; nothing is logged. There is no seeded production admin: the first admin
+is created from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` when no active admin exists (see
+`docs/production/DATA-RESET-RUNBOOK.md`). **Still to do by the owner:** run `check-users.sql` on the hosted database; if the old seed
+accounts (`admin@`, `clienta@`, `clientb@growthprint.dev`) exist there, their old passwords were public in source: delete or rotate them.
+
+**Open security items (documented, not changed):** JWTs stay valid up to 1 h after an account is disabled; the in-memory rate limiter is per instance.
 
 ## Authentication
 

@@ -26,6 +26,8 @@ public record AiSettingsView(
         AiConnectionStatus status,
         Instant lastTestAt,
         String lastTestMessage,
-        Instant updatedAt
+        Instant updatedAt,
+        @Schema(description = "True when a key is saved but this server's encryption key can't decrypt it; enter the key again")
+        boolean keyUnreadable
 ) {
 }

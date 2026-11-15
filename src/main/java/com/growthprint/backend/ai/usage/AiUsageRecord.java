@@ -64,6 +64,14 @@ public class AiUsageRecord {
         this.createdAt = createdAt;
     }
 
+    /** Completes a reservation made before the provider call (see AiService): outcome, tokens and latency. */
+    public void finish(Integer inputTokens, Integer outputTokens, int latencyMs, String outcome) {
+        this.inputTokens = inputTokens;
+        this.outputTokens = outputTokens;
+        this.latencyMs = latencyMs;
+        this.outcome = outcome;
+    }
+
     public UUID getId() { return id; }
     public UUID getUserId() { return userId; }
     public String getProvider() { return provider; }

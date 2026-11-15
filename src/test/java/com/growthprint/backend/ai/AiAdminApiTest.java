@@ -52,8 +52,9 @@ class AiAdminApiTest {
         when(repository.findById(AiSettings.SINGLETON_ID)).thenAnswer(i -> Optional.of(stored));
         when(repository.save(any(AiSettings.class))).thenAnswer(i -> stored = i.getArgument(0));
         AiSettingsService service = new AiSettingsService(repository,
-                new AiCredentialCipher(AiCredentialCipherTest.randomKey()), new AiProviderAdapters(new ObjectMapper()),
-                Clock.systemUTC());
+                new AiCredentialCipher(AiCredentialCipherTest.randomKey()),
+                new AiProviderAdapters(new ObjectMapper(), TestEndpointGuards.allowLocal()),
+                Clock.systemUTC(), TestEndpointGuards.allowLocal());
         service.update(new UpdateAiSettingsCommand(false, AiProviderType.GEMINI, "gemini-test", null, 30, 800, 50), admin);
 
         mvc = MockMvcBuilders.standaloneSetup(new AiAdminController(service))

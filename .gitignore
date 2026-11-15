@@ -6,3 +6,5 @@ target/
 .idea/
 *.iml
 .agents/
+# Local database backups taken by scripts/reset-dev-data.ps1
+backups/

@@ -1,6 +1,7 @@
 package com.growthprint.backend.ai.settings;
 
 import com.growthprint.backend.ai.provider.AiErrorCode;
+import com.growthprint.backend.ai.provider.AiEndpointGuard;
 import com.growthprint.backend.ai.provider.AiException;
 import com.growthprint.backend.ai.provider.AiProviderAdapters;
 import com.growthprint.backend.ai.provider.AiProviderType;
@@ -15,8 +16,6 @@ import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -25,23 +24,28 @@ import java.util.UUID;
  *     <li>AI is off by default and can only be turned on once provider, model and key are set.</li>
  *     <li>The key is write-only: it is encrypted before saving and only ever returned masked.</li>
  *     <li>Built-in providers always use their official endpoint; only the custom OpenAI-compatible provider
- *     takes an admin-supplied URL, which must be HTTPS (plain HTTP is allowed for localhost only).</li>
- *     <li>A connection test runs only when the admin asks for it.</li>
+ *     takes an admin-supplied URL, which must be HTTPS and resolve to public addresses ({@link AiEndpointGuard}).</li>
+ *     <li>AI can only be turned on after a successful connection test; changing the provider, model or endpoint
+ *     clears that test result.</li>
+ *     <li>A key belongs to one provider and host: changing either discards it, and only with explicit confirmation.</li>
+ *     <li>A connection test runs only when the admin asks for it, and no database transaction is held open while
+ *     waiting for the provider.</li>
  * </ul>
  */
 @Service
 public class AiSettingsService {
 
     private static final Logger log = LoggerFactory.getLogger(AiSettingsService.class);
-    private static final Set<String> LOCAL_HOSTS = Set.of("localhost", "127.0.0.1", "::1", "[::1]");
 
     private final AiSettingsRepository repository;
     private final AiCredentialCipher cipher;
     private final AiProviderAdapters adapters;
     private final Clock clock;
+    private final AiEndpointGuard endpointGuard;
 
     public AiSettingsService(AiSettingsRepository repository, AiCredentialCipher cipher,
-                             AiProviderAdapters adapters, Clock clock) {
+                             AiProviderAdapters adapters, Clock clock, AiEndpointGuard endpointGuard) {
+        this.endpointGuard = endpointGuard;
         this.repository = repository;
         this.cipher = cipher;
         this.adapters = adapters;
@@ -61,12 +65,16 @@ public class AiSettingsService {
         String baseUrl = resolveBaseUrl(provider, command.baseUrl());
 
         boolean providerChanged = settings.getProvider() != provider;
+        boolean endpointChanged = !java.util.Objects.equals(settings.getBaseUrl(), baseUrl);
         boolean connectionChanged = providerChanged
-                || !java.util.Objects.equals(settings.getModel(), model)
-                || !java.util.Objects.equals(settings.getBaseUrl(), baseUrl);
+                || endpointChanged
+                || !java.util.Objects.equals(settings.getModel(), model);
 
-        if (providerChanged && settings.hasKey()) {
-            // A key belongs to one provider; never send it to a different one.
+        if ((providerChanged || endpointChanged) && settings.hasKey()) {
+            // A key belongs to one provider and one host; never send it somewhere else. The admin must agree to losing it.
+            if (!command.keyResetConfirmed()) {
+                throw new AiException(AiErrorCode.KEY_RESET_NOT_CONFIRMED);
+            }
             settings.removeKey(adminId, clock.instant());
         }
 
@@ -76,6 +84,13 @@ public class AiSettingsService {
             }
             if (!settings.hasKey()) {
                 throw new AiException(AiErrorCode.KEY_MISSING);
+            }
+            if (!cipher.canDecrypt(settings.encryptedKey())) {
+                throw new AiException(cipher.isConfigured() ? AiErrorCode.KEY_UNREADABLE : AiErrorCode.ENCRYPTION_KEY_MISSING);
+            }
+            // Only the unchanged, already-tested connection may be switched on (a change below clears the test).
+            if (connectionChanged || settings.getLastTestStatus() != AiConnectionStatus.CONNECTED) {
+                throw new AiException(AiErrorCode.CONNECTION_NOT_TESTED);
             }
         }
 
@@ -111,8 +126,10 @@ public class AiSettingsService {
         return toView(repository.save(settings));
     }
 
-    /** Explicit, admin-requested connection test: one tiny generation call. Records a safe result. */
-    @Transactional
+    /**
+     * Explicit, admin-requested connection test: one tiny generation call. Records a safe result.
+     * Not transactional on purpose: the provider call can take minutes and must not hold a database connection.
+     */
     public AiSettingsView testConnection(UUID adminId) {
         AiSettings settings = load();
         ProviderConnection connection = connectionFor(settings);
@@ -126,8 +143,7 @@ public class AiSettingsService {
         return toView(repository.save(settings));
     }
 
-    /** Model discovery for the configured provider (admin request only). */
-    @Transactional(readOnly = true)
+    /** Model discovery for the configured provider (admin request only). Not transactional: it calls the provider. */
     public List<String> listModels() {
         return adapters.listModels(connectionFor(load()));
     }
@@ -169,7 +185,7 @@ public class AiSettingsService {
         return repository.findById(AiSettings.SINGLETON_ID).orElseGet(AiSettings::defaults);
     }
 
-    private static String resolveBaseUrl(AiProviderType provider, String requested) {
+    private String resolveBaseUrl(AiProviderType provider, String requested) {
         if (provider == null || !provider.requiresCustomBaseUrl()) {
             return null; // built-in providers are pinned to their official endpoint
         }
@@ -183,13 +199,7 @@ public class AiSettingsService {
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("The base URL isn't a valid URL.");
         }
-        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
-        boolean local = LOCAL_HOSTS.contains(host);
-        if (host.isEmpty() || uri.getUserInfo() != null || uri.getQuery() != null
-                || !(scheme.equals("https") || (scheme.equals("http") && local))) {
-            throw new IllegalArgumentException("The base URL must use https:// (plain http is only allowed for localhost).");
-        }
+        endpointGuard.requireAllowed(uri);
         return url;
     }
 
@@ -198,8 +208,11 @@ public class AiSettingsService {
     }
 
     private AiSettingsView toView(AiSettings settings) {
+        boolean keyUnreadable = settings.hasKey() && !cipher.canDecrypt(settings.encryptedKey());
         AiConnectionStatus status;
-        if (settings.getLastTestStatus() != null) {
+        if (keyUnreadable) {
+            status = AiConnectionStatus.KEY_UNREADABLE;
+        } else if (settings.getLastTestStatus() != null) {
             status = settings.getLastTestStatus();
         } else if (!settings.isEnabled()) {
             status = AiConnectionStatus.AI_DISABLED;
@@ -225,6 +238,7 @@ public class AiSettingsService {
                 status,
                 settings.getLastTestAt(),
                 settings.getLastTestMessage(),
-                settings.getUpdatedAt());
+                settings.getUpdatedAt(),
+                keyUnreadable);
     }
 }
