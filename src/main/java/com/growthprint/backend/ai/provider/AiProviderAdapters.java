@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ConnectException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -29,6 +30,11 @@ public class AiProviderAdapters {
 
     private static final Logger log = LoggerFactory.getLogger(AiProviderAdapters.class);
     private static final int MAX_ATTEMPTS = 2;
+    /**
+     * Largest provider response body accepted. Generous for any completion (maxOutputTokens is capped at
+     * 8000, roughly 100 KB of text) while stopping a hostile or broken endpoint from exhausting memory.
+     */
+    static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
     private final ObjectMapper json;
     private final Map<AiProviderType.ApiFormat, ProviderAdapter> adapters = new EnumMap<>(AiProviderType.ApiFormat.class);
@@ -79,15 +85,21 @@ public class AiProviderAdapters {
         AiException lastFailure = new AiException(AiErrorCode.PROVIDER_UNAVAILABLE);
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                HttpResponse<String> response = http.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-                int status = response.statusCode();
-                if (status >= 200 && status < 300) {
-                    return parseJson(response.body());
-                }
-                lastFailure = new AiException(mapStatus(status));
-                log.warn("AI provider {} returned HTTP {} (attempt {}/{})", connection.type(), status, attempt, MAX_ATTEMPTS);
-                if (!isRetryable(status)) {
-                    throw lastFailure;
+                // ofInputStream + readBounded caps the body at MAX_RESPONSE_BYTES; ofString would buffer
+                // whatever the endpoint sends, however large.
+                HttpResponse<InputStream> response = http.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+                try {
+                    int status = response.statusCode();
+                    if (status >= 200 && status < 300) {
+                        return parseJson(readBounded(response.body()));
+                    }
+                    lastFailure = new AiException(mapStatus(status));
+                    log.warn("AI provider {} returned HTTP {} (attempt {}/{})", connection.type(), status, attempt, MAX_ATTEMPTS);
+                    if (!isRetryable(status)) {
+                        throw lastFailure;
+                    }
+                } finally {
+                    response.body().close();
                 }
             } catch (HttpTimeoutException e) {
                 lastFailure = new AiException(AiErrorCode.TIMEOUT);
@@ -105,6 +117,14 @@ public class AiProviderAdapters {
             }
         }
         throw lastFailure;
+    }
+
+    private static String readBounded(InputStream body) throws IOException {
+        byte[] bytes = body.readNBytes(MAX_RESPONSE_BYTES + 1);
+        if (bytes.length > MAX_RESPONSE_BYTES) {
+            throw new AiException(AiErrorCode.MALFORMED_RESPONSE);
+        }
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     private JsonNode parseJson(String body) {

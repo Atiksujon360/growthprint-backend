@@ -197,6 +197,17 @@ class AiProviderAdaptersTest {
     }
 
     @Test
+    void oversizedProviderResponseIsRejected() throws Exception {
+        // A hostile or broken endpoint must not be able to exhaust memory with a huge body.
+        String huge = "{\"choices\":[{\"message\":{\"content\":\"" + "x".repeat(3 * 1024 * 1024) + "\"}}]}";
+        try (FakeProviderServer server = new FakeProviderServer(FakeProviderServer.Reply.ok(huge))) {
+            assertThatThrownBy(() -> adapters.complete(connection(AiProviderType.OPENAI, server, "m"), request))
+                    .isInstanceOfSatisfying(AiException.class,
+                            e -> assertThat(e.code()).isEqualTo(AiErrorCode.MALFORMED_RESPONSE));
+        }
+    }
+
+    @Test
     void connectionDetailsNeverPrintTheKey() {
         ProviderConnection connection = new ProviderConnection(AiProviderType.OPENAI, "https://x", KEY, "m", Duration.ofSeconds(1));
         assertThat(connection.toString()).doesNotContain(KEY);

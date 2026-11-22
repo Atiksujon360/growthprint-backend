@@ -81,7 +81,24 @@ public class AiEndpointGuard {
 
     private static boolean isAlwaysBlocked(InetAddress a) {
         // Link-local covers 169.254.0.0/16 (cloud metadata 169.254.169.254) and fe80::/10; "any" is 0.0.0.0 / ::.
-        return a.isAnyLocalAddress() || a.isLinkLocalAddress() || a.isMulticastAddress();
+        if (a.isAnyLocalAddress() || a.isLinkLocalAddress() || a.isMulticastAddress()) {
+            return true;
+        }
+        // An IPv4-mapped/compatible IPv6 address reaches its embedded IPv4 target, so the IPv4
+        // always-blocked ranges apply to it as well (this holds even when local endpoints are allowed).
+        if (a instanceof Inet6Address) {
+            byte[] embedded = embeddedIpv4(a.getAddress());
+            return embedded != null && isAlwaysBlockedIpv4(embedded);
+        }
+        return false;
+    }
+
+    private static boolean isAlwaysBlockedIpv4(byte[] b) {
+        int first = b[0] & 0xff;
+        int second = b[1] & 0xff;
+        return first == 0                              // 0.0.0.0/8 "this network"
+                || (first == 169 && second == 254)    // 169.254.0.0/16 link-local (cloud metadata)
+                || first >= 224;                      // 224.0.0.0/4 multicast and 240.0.0.0/4 reserved
     }
 
     private static boolean isNonPublic(InetAddress a) {
@@ -90,18 +107,69 @@ public class AiEndpointGuard {
         }
         byte[] b = a.getAddress();
         if (a instanceof Inet4Address) {
-            int first = b[0] & 0xff;
-            int second = b[1] & 0xff;
-            return first == 0                                   // 0.0.0.0/8
-                    || (first == 100 && second >= 64 && second <= 127)  // 100.64.0.0/10 carrier-grade NAT
-                    || (first == 192 && second == 0 && (b[2] & 0xff) == 0) // 192.0.0.0/24
-                    || (first == 198 && (second == 18 || second == 19))    // 198.18.0.0/15 benchmarking
-                    || first >= 240;                                // reserved and broadcast
+            return isNonPublicIpv4(b);
         }
         if (a instanceof Inet6Address) {
-            return (b[0] & 0xfe) == 0xfc;                       // fc00::/7 unique-local
+            // IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible (::a.b.c.d) forms tunnel to IPv4:
+            // judge them by the embedded address, not by the IPv6 rules.
+            byte[] embedded = embeddedIpv4(b);
+            if (embedded != null) {
+                return isNonPublicIpv4(embedded);
+            }
+            return (b[0] & 0xfe) == 0xfc                 // fc00::/7 unique-local
+                    || isTeredo(b)                       // 2001::/32, embeds IPv4 addresses
+                    || is6to4(b);                        // 2002::/16, bytes 2..5 are an IPv4 address
         }
         return false;
+    }
+
+    private static boolean isNonPublicIpv4(byte[] b) {
+        int first = b[0] & 0xff;
+        int second = b[1] & 0xff;
+        int third = b[2] & 0xff;
+        return first == 0                                            // 0.0.0.0/8
+                || first == 10                                       // 10.0.0.0/8 private
+                || first == 127                                      // 127.0.0.0/8 loopback
+                || (first == 169 && second == 254)                   // 169.254.0.0/16 link-local
+                || (first == 172 && second >= 16 && second <= 31)    // 172.16.0.0/12 private
+                || (first == 192 && second == 168)                   // 192.168.0.0/16 private
+                || (first == 100 && second >= 64 && second <= 127)   // 100.64.0.0/10 carrier-grade NAT
+                || (first == 192 && second == 0 && third == 0)       // 192.0.0.0/24
+                || (first == 198 && (second == 18 || second == 19))  // 198.18.0.0/15 benchmarking
+                || first >= 224;                                     // multicast and reserved
+    }
+
+    /**
+     * The embedded IPv4 address of an IPv4-mapped (::ffff:a.b.c.d) or IPv4-compatible (::a.b.c.d)
+     * IPv6 address, or null for a native IPv6 address. Both forms are deprecated but still routed
+     * by dual-stack stacks, so they must not smuggle a private IPv4 target past the IPv6 rules.
+     */
+    private static byte[] embeddedIpv4(byte[] b) {
+        boolean prefixZero = true;
+        for (int i = 0; i < 10; i++) {
+            if (b[i] != 0) {
+                prefixZero = false;
+                break;
+            }
+        }
+        if (prefixZero && b[10] == (byte) 0xff && b[11] == (byte) 0xff) {
+            return new byte[]{b[12], b[13], b[14], b[15]};
+        }
+        for (int i = 0; i < 12; i++) {
+            if (b[i] != 0) {
+                return null;
+            }
+        }
+        return new byte[]{b[12], b[13], b[14], b[15]};
+    }
+
+    private static boolean isTeredo(byte[] b) {
+        return (b[0] & 0xff) == 0x20 && (b[1] & 0xff) == 0x01
+                && (b[2] & 0xff) == 0x00 && (b[3] & 0xff) == 0x00;
+    }
+
+    private static boolean is6to4(byte[] b) {
+        return (b[0] & 0xff) == 0x20 && (b[1] & 0xff) == 0x02;
     }
 
     private static InetAddress[] resolveSystem(String host) {

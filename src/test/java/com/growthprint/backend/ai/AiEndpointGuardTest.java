@@ -41,13 +41,23 @@ class AiEndpointGuardTest {
     void privateLoopbackLinkLocalAndMetadataAddressesAreRefused() {
         String[] blocked = {
                 "127.0.0.1", "10.1.2.3", "172.16.5.5", "192.168.1.10", "169.254.169.254", "100.64.0.1",
-                "0.0.0.0", "198.18.0.5", "::1", "fe80::1", "fd12:3456:789a::1", "224.0.0.1"};
+                "0.0.0.0", "198.18.0.5", "::1", "fe80::1", "fd12:3456:789a::1", "224.0.0.1",
+                // IPv4-mapped/compatible IPv6 forms must be judged by the embedded IPv4 address.
+                "::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:169.254.169.254", "::ffff:224.0.0.1",
+                // Transition mechanisms that embed an IPv4 address.
+                "2001:0:4136:e378:8000:63bf:3fff:fdd2", "2002:0a00::1"};
         for (String ip : blocked) {
             assertThatThrownBy(() -> resolvingTo(false, ip).requireAllowed(URI.create("https://x.example.com/v1")))
                     .as("address %s must be refused", ip)
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessage(AiErrorCode.ENDPOINT_NOT_ALLOWED.message());
         }
+    }
+
+    @Test
+    void anIpv4MappedPublicAddressIsJudgedByTheEmbeddedAddress() {
+        assertThatCode(() -> resolvingTo(false, "::ffff:8.8.8.8").requireAllowed(URI.create("https://x.example.com/v1")))
+                .doesNotThrowAnyException();
     }
 
     @Test

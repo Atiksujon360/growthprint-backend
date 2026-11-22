@@ -76,6 +76,26 @@ class InMemoryRateLimiterTest {
     }
 
     @Test
+    void cleanupEvictsByEachBucketsOwnExpiryNotTheCallersWindow() {
+        // Regression: cleanup used the triggering request's window, so frequent short-window
+        // traffic (login, 1m) evicted still-active long-window buckets (account recovery, 15m)
+        // and silently reset their allowance.
+        TestClock clock = new TestClock();
+        InMemoryRateLimiter limiter = new InMemoryRateLimiter(clock);
+        Duration longWindow = Duration.ofMinutes(15);
+
+        assertThat(limiter.tryAcquire("recovery", 2, longWindow)).isTrue();
+        assertThat(limiter.tryAcquire("recovery", 2, longWindow)).isTrue();
+
+        clock.advance(Duration.ofMinutes(3)); // past 2x the short window, well inside the long one
+        for (int i = 0; i < 1_100; i++) {
+            limiter.tryAcquire("login", 100_000, WINDOW);
+        }
+
+        assertThat(limiter.tryAcquire("recovery", 2, longWindow)).isFalse();
+    }
+
+    @Test
     void expiredBucketsAreEvictedPeriodically() {
         TestClock clock = new TestClock();
         InMemoryRateLimiter limiter = new InMemoryRateLimiter(clock);

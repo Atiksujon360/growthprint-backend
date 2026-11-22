@@ -37,17 +37,18 @@ public class InMemoryRateLimiter {
 
         RateLimitBucket bucket = buckets.compute(key, (k, existing) -> {
             // Start a new window when there is none yet or the previous one has fully elapsed.
-            if (existing == null || !now.isBefore(existing.windowStart.plus(window))) {
-                return new RateLimitBucket(now, 1);
+            if (existing == null || !now.isBefore(existing.expiresAt)) {
+                return new RateLimitBucket(now.plus(window), 1);
             }
             existing.count.incrementAndGet();
             return existing;
         });
 
-        // Periodically evict expired buckets so the map cannot grow without bound.
+        // Periodically evict expired buckets so the map cannot grow without bound. Each bucket expires
+        // on its own window: a short-window request must not evict a still-active long-window bucket
+        // (e.g. account-recovery traffic cleaning up after login requests would reset the 15-minute cap).
         if (callCounter.incrementAndGet() % CLEANUP_EVERY_N_CALLS == 0) {
-            Instant cleanupThreshold = now.minus(window.multipliedBy(2));
-            buckets.entrySet().removeIf(entry -> entry.getValue().windowStart.isBefore(cleanupThreshold));
+            buckets.entrySet().removeIf(entry -> entry.getValue().expiresAt.isBefore(now));
         }
 
         return bucket.count.get() <= maxRequests;
@@ -66,11 +67,11 @@ public class InMemoryRateLimiter {
     }
 
     private static class RateLimitBucket {
-        final Instant windowStart;
+        final Instant expiresAt;
         final AtomicInteger count;
 
-        RateLimitBucket(Instant windowStart, int initialCount) {
-            this.windowStart = windowStart;
+        RateLimitBucket(Instant expiresAt, int initialCount) {
+            this.expiresAt = expiresAt;
             this.count = new AtomicInteger(initialCount);
         }
     }
